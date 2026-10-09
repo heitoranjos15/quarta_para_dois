@@ -9,7 +9,7 @@ import (
 )
 
 type Cache interface {
-	Get(key string) (any, bool)
+	Get(key string, dest any) bool
 	Set(key string, val any, ttl time.Duration)
 	Delete(key string)
 }
@@ -27,21 +27,20 @@ func NewRedisCache(addr, password string) *RedisCache {
 	return &RedisCache{client: rdb}
 }
 
-func (c *RedisCache) Get(key string) (any, bool) {
+func (c *RedisCache) Get(key string, dest any) bool {
 	ctx := context.Background()
 	data, err := c.client.Get(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, false
+			return false
 		}
-		return nil, false
+		return false
 	}
 
-	var val any
-	if err := json.Unmarshal(data, &val); err != nil {
-		return nil, false
+	if err := json.Unmarshal(data, dest); err != nil {
+		return false
 	}
-	return val, true
+	return true
 }
 
 func (c *RedisCache) Set(key string, val any, ttl time.Duration) {
