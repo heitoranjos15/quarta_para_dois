@@ -1,0 +1,33 @@
+{
+  "version": "0.1",
+  "ignoreFiles": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/*.log",
+    "**/.env*"
+  ],
+  "chat": {
+    "contextFiles": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "README.md",
+      "backend/go.mod",
+      "frontend/package.json"
+    ]
+  },
+  "instructions": [
+    {
+      "filePattern": "backend/**/*.go",
+      "instructions": "Follow Go standard library patterns. Use Chi router. Use slog for logging. Handle errors explicitly. Write unit tests with testify."
+    },
+    {
+      "filePattern": "frontend/**/*.{ts,tsx}",
+      "instructions": "Use React 18 + TypeScript + Vite. Use TanStack Query for server state. Use Tailwind for styling. Follow Airbnb TypeScript style. Write tests with Vitest + React Testing Library."
+    },
+    {
+      "filePattern": "**/*.md",
+      "instructions": "Keep documentation concise and up-to-date. Update AGENTS.md when architecture changes."
+    }
+  ]
+}
