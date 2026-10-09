@@ -61,7 +61,12 @@ test: backend-test frontend-test
 lint: backend-lint frontend-lint
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/docker-compose-local
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add docker-compose.yml Makefile README.md
 git commit -m "chore: docker compose polish, makefile, readme updates"

@@ -97,7 +97,12 @@ export function PlayByPlayTable({ plays }: { plays: PlayDetail[] }) {
 
 - [ ] **Step 4: Verify with real data**
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/game-detail-pbp
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add frontend/src/components/pbp/
 git commit -m "feat: play-by-play tab with quarter accordions"

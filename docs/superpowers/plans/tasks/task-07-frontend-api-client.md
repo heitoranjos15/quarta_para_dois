@@ -127,7 +127,12 @@ export function useWeeks(season: number) {
 
 - [ ] **Step 5: Verify types compile** `npm run build`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/frontend-api-client
+```
+
+- [ ] **Step 7: Commit**
 ```bash
 git add frontend/src/api/ frontend/src/hooks/
 git commit -m "feat: frontend api client and react query hooks"

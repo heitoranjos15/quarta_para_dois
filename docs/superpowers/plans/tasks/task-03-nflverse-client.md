@@ -70,7 +70,12 @@ Expected: PASS (first run downloads ~180MB, subsequent cached)
 
 - [ ] **Step 6: Repeat for Schedules, Teams, Rosters**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/nflverse-client
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add backend/internal/nflverse/
 git commit -m "feat: nflverse parquet client with redis caching"

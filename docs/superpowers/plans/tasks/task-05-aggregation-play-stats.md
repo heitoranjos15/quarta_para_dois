@@ -69,7 +69,12 @@ Implementation:
 
 - [ ] **Step 4: Run test** → PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/aggregation-play-stats
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add backend/internal/aggregation/play_stats.go backend/internal/aggregation/play_stats_test.go
 git commit -m "feat: play-by-play processing with drive grouping"

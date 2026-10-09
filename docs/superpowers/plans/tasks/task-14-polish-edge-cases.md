@@ -56,7 +56,12 @@ cd ../frontend && npm run test && npm run lint && npm run build
   - Graceful shutdown on SIGTERM
   - Rate limit handling with exponential backoff for GitHub API
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 9: Create feature branch**
+```bash
+git checkout -b feat/polish-edge-cases
+```
+
+- [ ] **Step 10: Commit**
 ```bash
 git add -A
 git commit -m "feat: polish - error boundaries, skeletons, a11y, performance, empty states"

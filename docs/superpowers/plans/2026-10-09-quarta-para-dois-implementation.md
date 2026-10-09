@@ -88,7 +88,12 @@ Expected: PASS
 Run: `cd backend && go run ./cmd/api`
 Expected: "Server starting on :8080"
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/backend-scaffolding
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add backend/
 git commit -m "feat: backend scaffolding with config, chi router, middleware"
@@ -130,7 +135,12 @@ Use `github.com/redis/go-redis/v9`. JSON marshal/unmarshal for values. Handle co
 Run: `cd backend && go test ./internal/nflverse/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/redis-cache
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add backend/internal/nflverse/cache.go backend/internal/nflverse/cache_test.go
 git commit -m "feat: redis cache wrapper"
@@ -186,7 +196,12 @@ Expected: PASS (first run downloads ~180MB, subsequent cached)
 
 - [ ] **Step 6: Repeat for Schedules, Teams, Rosters**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/nflverse-client
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add backend/internal/nflverse/
 git commit -m "feat: nflverse parquet client with redis caching"
@@ -235,7 +250,12 @@ Compute from PBP:
 Run: `cd backend && go test ./internal/aggregation/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/aggregation-team-stats
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add backend/internal/aggregation/
 git commit -m "feat: team comparison stats aggregation"
@@ -275,7 +295,16 @@ func TestProcessPlays(t *testing.T) {
 
 - [ ] **Step 4: Run test** → PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/aggregation-play-stats
+```
+
+- [ ] **Step 6: Commit**
+```bash
+git add backend/internal/aggregation/play_stats.go backend/internal/aggregation/play_stats_test.go
+git commit -m "feat: play-by-play processing with drive grouping"
+```
 
 ---
 
@@ -328,7 +357,16 @@ func TestGamesHandler(t *testing.T) {
 
 - [ ] **Step 5: Run test** → PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/http-handlers
+```
+
+- [ ] **Step 7: Commit**
+```bash
+git add backend/internal/handlers/ backend/cmd/api/main.go
+git commit -m "feat: http handlers for games, seasons, teams"
+```
 
 ---
 
@@ -350,10 +388,19 @@ func TestGamesHandler(t *testing.T) {
 - [ ] **Step 3: Create React Query hooks** for each endpoint
 - [ ] **Step 4: Configure QueryClient** in main.tsx (staleTime 5min, retry 1)
 - [ ] **Step 5: Verify types compile** `npm run build`
-- [ ] **Step 6: Commit**
+
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/frontend-api-client
+```
+
+- [ ] **Step 7: Commit**
+```bash
+git add frontend/src/api/ frontend/src/hooks/
+git commit -m "feat: frontend api client and react query hooks"
+```
 
 ---
-
 ### Task 8: Season & Week Pages
 
 **Files:**
@@ -370,10 +417,19 @@ func TestGamesHandler(t *testing.T) {
 - [ ] **Step 2: Implement WeekPage** — list of GameCards
 - [ ] **Step 3: Implement GameCard** — expandable row: "Chargers 33 × 10 Broncos [v]" with team logos, scores, click → `/game/{gameId}`
 - [ ] **Step 4: Verify in browser** `npm run dev`
-- [ ] **Step 5: Commit**
+
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/season-week-pages
+```
+
+- [ ] **Step 6: Commit**
+```bash
+git add frontend/src/pages/SeasonPage.tsx frontend/src/pages/WeekPage.tsx frontend/src/components/game/
+git commit -m "feat: season and week pages with game cards"
+```
 
 ---
-
 ### Task 9: Game Detail Page (Stats Tab)
 
 **Files:**
@@ -395,10 +451,19 @@ Stats tab:
 - [ ] **Step 2: Implement TeamComparisonCharts** (bar charts, radar chart)
 - [ ] **Step 3: Implement StatRow** component
 - [ ] **Step 4: Verify with real API** (start backend, visit `/game/2024_01_LAC_DEN`)
-- [ ] **Step 5: Commit**
+
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/game-detail-stats
+```
+
+- [ ] **Step 6: Commit**
+```bash
+git add frontend/src/pages/GamePage.tsx frontend/src/components/stats/ frontend/src/components/ui/Tabs.tsx
+git commit -m "feat: game detail page with stats tab and charts"
+```
 
 ---
-
 ### Task 10: Game Detail Page (Play-by-Play Tab)
 
 **Files:**
@@ -417,10 +482,19 @@ Play row: "1 & 10 pass Herbert (QB) to Wilson (TE) 15 yards (EPA: +1.2) — tack
 - [ ] **Step 2: Implement PlayRow** with formatting
 - [ ] **Step 3: Implement PlayByPlayTable** with quarter filter tabs
 - [ ] **Step 4: Verify with real data**
-- [ ] **Step 5: Commit**
+
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/game-detail-pbp
+```
+
+- [ ] **Step 6: Commit**
+```bash
+git add frontend/src/components/pbp/
+git commit -m "feat: play-by-play tab with quarter accordions"
+```
 
 ---
-
 ### Task 11: Game Detail Page (Notes Tab)
 
 **Files:**
@@ -435,10 +509,19 @@ Play row: "1 & 10 pass Herbert (QB) to Wilson (TE) 15 yards (EPA: +1.2) — tack
 
 - [ ] **Step 1: Implement components**
 - [ ] **Step 2: Wire into GamePage Notes tab**
-- [ ] **Step 3: Commit**
+
+- [ ] **Step 3: Create feature branch**
+```bash
+git checkout -b feat/game-detail-notes
+```
+
+- [ ] **Step 4: Commit**
+```bash
+git add frontend/src/components/notes/
+git commit -m "feat: game notes tab with weather, injuries, vegas"
+```
 
 ---
-
 ### Task 12: CI/CD & Deployment Config
 
 **Files:**
@@ -455,10 +538,19 @@ Play row: "1 & 10 pass Herbert (QB) to Wilson (TE) 15 yards (EPA: +1.2) — tack
 - [ ] **Step 3: Lint workflow** — golangci-lint + ESLint
 - [ ] **Step 4: Configure Fly.io app** `flyctl launch --dockerfile backend/Dockerfile`
 - [ ] **Step 5: Test deployments**
-- [ ] **Step 6: Commit**
+
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/cicd-deployment
+```
+
+- [ ] **Step 7: Commit**
+```bash
+git add .github/workflows/ fly.toml
+git commit -m "ci: add github actions for api, frontend, lint"
+```
 
 ---
-
 ### Task 13: Docker Compose & Local Dev Polish
 
 **Files:**
@@ -470,10 +562,19 @@ Play row: "1 & 10 pass Herbert (QB) to Wilson (TE) 15 yards (EPA: +1.2) — tack
 - [ ] **Step 1: Verify `docker-compose up -d` starts API + Redis + Frontend**
 - [ ] **Step 2: Test full flow** — browser to localhost:5173 → API → Redis → nflverse
 - [ ] **Step 3: Add README.md** with architecture diagram, quick start, deployment guide
-- [ ] **Step 4: Commit**
+
+- [ ] **Step 4: Create feature branch**
+```bash
+git checkout -b feat/docker-compose-local
+```
+
+- [ ] **Step 5: Commit**
+```bash
+git add docker-compose.yml Makefile README.md
+git commit -m "chore: docker compose polish, makefile, readme updates"
+```
 
 ---
-
 ### Task 14: Polish & Edge Cases
 
 **Files:**
@@ -486,10 +587,19 @@ Play row: "1 & 10 pass Herbert (QB) to Wilson (TE) 15 yards (EPA: +1.2) — tack
 - [ ] **Step 5: Accessibility** (ARIA labels, keyboard nav, color contrast)
 - [ ] **Step 6: Performance** — React.memo, useMemo for charts, virtualized PBP list
 - [ ] **Step 7: Run full test suite** `cd backend && go test ./... && cd ../frontend && npm run test && npm run lint`
-- [ ] **Step 8: Commit**
+
+- [ ] **Step 8: Create feature branch**
+```bash
+git checkout -b feat/polish-edge-cases
+```
+
+- [ ] **Step 9: Commit**
+```bash
+git add -A
+git commit -m "feat: polish - error boundaries, skeletons, a11y, performance, empty states"
+```
 
 ---
-
 ## Execution Recommendation
 
 **Subagent-driven** recommended because:
