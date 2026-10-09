@@ -52,7 +52,12 @@ func NewRedisCache(addr, password string) *RedisCache { ... }
 Run: `cd backend && go test ./internal/nflverse/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/redis-cache
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add backend/internal/nflverse/cache.go backend/internal/nflverse/cache_test.go
 git commit -m "feat: redis cache wrapper"

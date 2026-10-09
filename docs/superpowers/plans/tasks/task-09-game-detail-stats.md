@@ -102,7 +102,12 @@ export function StatRow({ label, home, away, unit = '' }: { label: string; home:
 
 - [ ] **Step 5: Verify with real API** (start backend, visit `/game/2024_01_LAC_DEN`)
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/game-detail-stats
+```
+
+- [ ] **Step 7: Commit**
 ```bash
 git add frontend/src/pages/GamePage.tsx frontend/src/components/stats/ frontend/src/components/ui/Tabs.tsx
 git commit -m "feat: game detail page with stats tab and charts"

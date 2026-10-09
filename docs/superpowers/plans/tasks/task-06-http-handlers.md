@@ -96,7 +96,12 @@ r.Route("/api", func(r chi.Router) {
 
 - [ ] **Step 5: Run test** → PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Create feature branch**
+```bash
+git checkout -b feat/http-handlers
+```
+
+- [ ] **Step 7: Commit**
 ```bash
 git add backend/internal/handlers/ backend/cmd/api/main.go
 git commit -m "feat: http handlers for games, seasons, teams"

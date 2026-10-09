@@ -100,7 +100,12 @@ export function GameCard({ game }: { game: Game }) {
 
 - [ ] **Step 4: Verify in browser** `npm run dev`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/season-week-pages
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add frontend/src/pages/SeasonPage.tsx frontend/src/pages/WeekPage.tsx frontend/src/components/game/
 git commit -m "feat: season and week pages with game cards"

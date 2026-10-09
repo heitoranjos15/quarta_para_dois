@@ -120,7 +120,12 @@ export function VegasLines({ vegas }: { vegas: GameNotes['vegas'] }) {
 
 - [ ] **Step 6: Wire into GamePage Notes tab**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/game-detail-notes
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add frontend/src/components/notes/
 git commit -m "feat: game notes tab with weather, injuries, vegas"

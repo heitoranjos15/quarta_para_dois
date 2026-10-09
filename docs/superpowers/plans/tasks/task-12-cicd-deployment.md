@@ -110,7 +110,12 @@ flyctl secrets set REDIS_ADDR=... REDIS_PASSWORD=... GITHUB_TOKEN=...
 
 - [ ] **Step 6: Test deployments**
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/cicd-deployment
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add .github/workflows/ fly.toml
 git commit -m "ci: add github actions for api, frontend, lint"

@@ -59,7 +59,12 @@ Expected: PASS
 Run: `cd backend && go run ./cmd/api`
 Expected: "Server starting on :8080"
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Create feature branch**
+```bash
+git checkout -b feat/backend-scaffolding
+```
+
+- [ ] **Step 8: Commit**
 ```bash
 git add backend/
 git commit -m "feat: backend scaffolding with config, chi router, middleware"

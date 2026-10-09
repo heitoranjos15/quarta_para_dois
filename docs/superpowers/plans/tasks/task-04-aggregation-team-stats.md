@@ -72,7 +72,12 @@ Compute from PBP (filter by `posteam`):
 Run: `cd backend && go test ./internal/aggregation/... -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create feature branch**
+```bash
+git checkout -b feat/aggregation-team-stats
+```
+
+- [ ] **Step 6: Commit**
 ```bash
 git add backend/internal/aggregation/
 git commit -m "feat: team comparison stats aggregation"
