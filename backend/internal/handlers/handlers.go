@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,12 +15,25 @@ import (
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
-type contextKey string
+const (
+	nflverseClientKey = "nflverseClient"
+	espnClientKey     = "espnClient"
+)
 
-const nflverseClientKey contextKey = "nflverseClient"
+type espnClientInterface interface {
+	GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error)
+	GetGame(ctx context.Context, season, week int, gameID string) (*nflverse.Game, error)
+	GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]nflverse.Game, error)
+}
+
+func getESPNClient(r *http.Request) (espnClientInterface, bool) {
+	client, ok := r.Context().Value(espnClientKey).(espnClientInterface)
+	fmt.Printf("DEBUG getESPNClient: key=%q, ok=%v, client=%v\n", espnClientKey, ok, client)
+	return client, ok
+}
 
 type APIResponse[T any] struct {
-	Data T   `json:"data"`
+	Data T    `json:"data"`
 	Meta Meta `json:"meta"`
 }
 
@@ -28,9 +43,9 @@ type Meta struct {
 }
 
 type GameNotes struct {
-	Weather  *WeatherInfo  `json:"weather,omitempty"`
-	Injuries []InjuryInfo  `json:"injuries,omitempty"`
-	Vegas    *VegasInfo    `json:"vegas,omitempty"`
+	Weather  *WeatherInfo `json:"weather,omitempty"`
+	Injuries []InjuryInfo `json:"injuries,omitempty"`
+	Vegas    *VegasInfo   `json:"vegas,omitempty"`
 }
 
 type WeatherInfo struct {
@@ -42,18 +57,18 @@ type WeatherInfo struct {
 }
 
 type InjuryInfo struct {
-	Player    string `json:"player"`
-	Team      string `json:"team"`
-	Position  string `json:"position"`
-	Status    string `json:"status"`
-	Detail    string `json:"detail"`
+	Player   string `json:"player"`
+	Team     string `json:"team"`
+	Position string `json:"position"`
+	Status   string `json:"status"`
+	Detail   string `json:"detail"`
 }
 
 type VegasInfo struct {
-	Spread     float64 `json:"spread"`
-	Total      float64 `json:"total"`
-	HomeML     int     `json:"home_ml"`
-	AwayML     int     `json:"away_ml"`
+	Spread float64 `json:"spread"`
+	Total  float64 `json:"total"`
+	HomeML int     `json:"home_ml"`
+	AwayML int     `json:"away_ml"`
 }
 
 type nflverseClientInterface interface {
@@ -105,12 +120,12 @@ func SeasonsListHandler(w http.ResponseWriter, r *http.Request) {
 	if time.Now().Month() < 9 {
 		currentYear--
 	}
-	
+
 	seasons := make([]int, 0, currentYear-1998)
 	for y := 1999; y <= currentYear; y++ {
 		seasons = append(seasons, y)
 	}
-	
+
 	respond(w, seasons, false, currentYear, http.StatusOK)
 }
 
@@ -121,7 +136,7 @@ func SeasonsWeeksHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, "invalid season", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Regular season weeks (1-18) + playoffs
 	maxWeek := 18
 	if year >= 2021 {
@@ -129,78 +144,67 @@ func SeasonsWeeksHandler(w http.ResponseWriter, r *http.Request) {
 	} else if year >= 1978 {
 		maxWeek = 16
 	}
-	
+
 	weeks := make([]int, maxWeek)
 	for i := 1; i <= maxWeek; i++ {
 		weeks[i-1] = i
 	}
-	
+
 	respond(w, weeks, false, year, http.StatusOK)
 }
 
 func SeasonsGamesHandler(w http.ResponseWriter, r *http.Request) {
 	yearStr := chi.URLParam(r, "year")
 	weekStr := chi.URLParam(r, "week")
-	
+
 	year, err := strconv.Atoi(yearStr)
 	if err != nil || year < 1999 {
 		respondError(w, "invalid season", http.StatusBadRequest)
 		return
 	}
-	
+
 	week, err := strconv.Atoi(weekStr)
 	if err != nil || week < 1 {
 		respondError(w, "invalid week", http.StatusBadRequest)
 		return
 	}
-	
-	client, ok := r.Context().Value(nflverseClientKey).(nflverseClientInterface)
+
+	espnClient, ok := getESPNClient(r)
 	if !ok {
 		respondError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	
-	games, err := client.GetSchedules(year)
+
+	fmt.Printf("DEBUG: Fetching schedule for %d week %d\n", year, week)
+	ctx := r.Context()
+	games, err := espnClient.GetSchedule(ctx, year, week)
 	if err != nil {
+		fmt.Printf("DEBUG: Error fetching schedule: %v\n", err)
 		respondError(w, "failed to fetch schedules", http.StatusServiceUnavailable)
 		return
 	}
-	
-	var filtered []nflverse.Game
-	for _, g := range games {
-		if g.Week == week && g.Season == year {
-			filtered = append(filtered, g)
-		}
-	}
-	
-	respond(w, filtered, false, year, http.StatusOK)
+
+	fmt.Printf("DEBUG: Got %d games\n", len(games))
+	respond(w, games, false, year, http.StatusOK)
 }
 
-func GameDetailHandler(client nflverseClientInterface) http.HandlerFunc {
+func GameDetailHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
 		season := extractSeason(gameID)
-		
-		// Get schedules to find the game
-		schedules, err := client.GetSchedules(season)
+
+		ctx := r.Context()
+		game, err := espnClient.GetGame(ctx, season, 0, gameID) // week=0 means search all weeks
 		if err != nil {
 			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
 			return
 		}
-		
-		var game *nflverse.Game
-		for _, g := range schedules {
-			if g.GameID == gameID {
-				game = &g
-				break
-			}
-		}
-		
+
 		if game == nil {
 			respondError(w, "game not found", http.StatusNotFound)
 			return
 		}
-		
+
 		respond(w, game, false, season, http.StatusOK)
 	}
 }
@@ -209,19 +213,19 @@ func GameStatsHandler(client nflverseClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
 		season := extractSeason(gameID)
-		
+
 		plays, err := client.GetPBP(season)
 		if err != nil {
 			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
 			return
 		}
-		
+
 		gamePlays := filterPlaysByGame(plays, gameID)
 		if len(gamePlays) == 0 {
 			respondError(w, "game not found", http.StatusNotFound)
 			return
 		}
-		
+
 		stats := aggregation.ComputeTeamStats(gamePlays)
 		respond(w, stats, true, season, http.StatusOK)
 	}
@@ -231,23 +235,23 @@ func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
 		season := extractSeason(gameID)
-		
+
 		// Optional query params for filtering
 		quarterStr := r.URL.Query().Get("quarter")
 		driveStr := r.URL.Query().Get("drive")
-		
+
 		plays, err := client.GetPBP(season)
 		if err != nil {
 			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
 			return
 		}
-		
+
 		gamePlays := filterPlaysByGame(plays, gameID)
 		if len(gamePlays) == 0 {
 			respondError(w, "game not found", http.StatusNotFound)
 			return
 		}
-		
+
 		// Filter by quarter if specified
 		if quarterStr != "" {
 			quarter, err := strconv.Atoi(quarterStr)
@@ -261,7 +265,7 @@ func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
 				gamePlays = filtered
 			}
 		}
-		
+
 		// Filter by drive if specified
 		if driveStr != "" {
 			drive, err := strconv.Atoi(driveStr)
@@ -275,36 +279,29 @@ func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
 				gamePlays = filtered
 			}
 		}
-		
+
 		details := aggregation.ProcessPlays(gamePlays)
 		respond(w, details, true, season, http.StatusOK)
 	}
 }
 
-func GameNotesHandler(client nflverseClientInterface) http.HandlerFunc {
+func GameNotesHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
 		season := extractSeason(gameID)
-		
-		schedules, err := client.GetSchedules(season)
+
+		ctx := r.Context()
+		game, err := espnClient.GetGame(ctx, season, 0, gameID)
 		if err != nil {
 			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
 			return
 		}
-		
-		var game *nflverse.Game
-		for _, g := range schedules {
-			if g.GameID == gameID {
-				game = &g
-				break
-			}
-		}
-		
+
 		if game == nil {
 			respondError(w, "game not found", http.StatusNotFound)
 			return
 		}
-		
+
 		notes := GameNotes{
 			Weather: &WeatherInfo{
 				Temperature: game.Temp,
@@ -319,12 +316,12 @@ func GameNotesHandler(client nflverseClientInterface) http.HandlerFunc {
 				Total:  0,
 			},
 		}
-		
+
 		respond(w, notes, false, season, http.StatusOK)
 	}
 }
 
-func TeamGamesHandler(client nflverseClientInterface) http.HandlerFunc {
+func TeamGamesHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		teamAbbr := chi.URLParam(r, "abbr")
 		seasonStr := r.URL.Query().Get("season")
@@ -339,19 +336,14 @@ func TeamGamesHandler(client nflverseClientInterface) http.HandlerFunc {
 			}
 		}
 		
-		schedules, err := client.GetSchedules(season)
+		ctx := r.Context()
+		games, err := espnClient.GetTeamSchedule(ctx, teamAbbr, season)
 		if err != nil {
-			respondError(w, "failed to fetch schedules", http.StatusServiceUnavailable)
+			respondError(w, "failed to fetch team schedule", http.StatusServiceUnavailable)
 			return
 		}
 		
-		var filtered []nflverse.Game
-		for _, g := range schedules {
-			if strings.EqualFold(g.HomeTeam, teamAbbr) || strings.EqualFold(g.AwayTeam, teamAbbr) {
-				filtered = append(filtered, g)
-			}
-		}
-		
-		respond(w, filtered, false, season, http.StatusOK)
+		respond(w, games, false, season, http.StatusOK)
 	}
 }
+

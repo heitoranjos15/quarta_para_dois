@@ -62,6 +62,38 @@ func (m *mockNFLVerseClient) GetRosters(season int) ([]nflverse.Roster, error) {
 	return []nflverse.Roster{}, nil
 }
 
+type mockESPNClient struct {
+	schedule []nflverse.Game
+	shouldFail bool
+	err error
+}
+
+func (m *mockESPNClient) GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error) {
+	if m.shouldFail {
+		return nil, m.err
+	}
+	return m.schedule, nil
+}
+
+func (m *mockESPNClient) GetGame(ctx context.Context, season, week int, gameID string) (*nflverse.Game, error) {
+	if m.shouldFail {
+		return nil, m.err
+	}
+	for _, g := range m.schedule {
+		if g.GameID == gameID {
+			return &g, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]nflverse.Game, error) {
+	if m.shouldFail {
+		return nil, m.err
+	}
+	return m.schedule, nil
+}
+
 func setupTestRouter() *chi.Mux {
 	client := &mockNFLVerseClient{
 		pbpData: []nflverse.Play{
@@ -122,11 +154,26 @@ func setupTestRouter() *chi.Mux {
 		},
 	}
 
+	espnClient := &mockESPNClient{
+		schedule: []nflverse.Game{
+			{
+				GameID:   "2024_01_LAC_DEN",
+				Season:   2024,
+				Week:     1,
+				HomeTeam: "LAC",
+				AwayTeam: "DEN",
+				HomeScore: 27,
+				AwayScore: 20,
+			},
+		},
+	}
+
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, nflverseClientKey, client)
+			ctx = context.WithValue(ctx, espnClientKey, espnClient)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
@@ -134,11 +181,11 @@ func setupTestRouter() *chi.Mux {
 		r.Get("/seasons", SeasonsListHandler)
 		r.Get("/seasons/{year}/weeks", SeasonsWeeksHandler)
 		r.Get("/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler)
-		r.Get("/games/{gameID}", GameDetailHandler(client))
+		r.Get("/games/{gameID}", GameDetailHandler(client, espnClient))
 		r.Get("/games/{gameID}/stats", GameStatsHandler(client))
 		r.Get("/games/{gameID}/plays", GamePlaysHandler(client))
-		r.Get("/games/{gameID}/notes", GameNotesHandler(client))
-		r.Get("/teams/{abbr}/games", TeamGamesHandler(client))
+		r.Get("/games/{gameID}/notes", GameNotesHandler(client, espnClient))
+		r.Get("/teams/{abbr}/games", TeamGamesHandler(client, espnClient))
 	})
 	return r
 }

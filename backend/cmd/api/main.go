@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -14,9 +15,10 @@ import (
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
-type contextKey string
-
-const nflverseClientKey contextKey = "nflverseClient"
+const (
+	nflverseClientKey = "nflverseClient"
+	espnClientKey     = "espnClient"
+)
 
 func main() {
 	cfg, err := config.Load()
@@ -25,7 +27,8 @@ func main() {
 	}
 
 	cache := nflverse.NewRedisCache(cfg.RedisAddr, cfg.RedisPassword)
-	client := nflverse.NewClient(cache, cfg.GitHubToken)
+	nflClient := nflverse.NewClient(cache, cfg.GitHubToken)
+	espnClient := nflverse.NewESPNClient(cfg.RedisAddr, cfg.RedisPassword)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
@@ -33,11 +36,13 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.Cors)
 
-	// Add nflverse client to request context
+	// Add clients to request context
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Printf("DEBUG middleware: adding clients to context\n")
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, nflverseClientKey, client)
+			ctx = context.WithValue(ctx, nflverseClientKey, nflClient)
+			ctx = context.WithValue(ctx, espnClientKey, espnClient)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	})
@@ -53,13 +58,13 @@ func main() {
 		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler)
 
 		// Games
-		r.Get("/games/{gameID}", handlers.GameDetailHandler(client))
-		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(client))
-		r.Get("/games/{gameID}/plays", handlers.GamePlaysHandler(client))
-		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(client))
+		r.Get("/games/{gameID}", handlers.GameDetailHandler(nflClient, espnClient))
+		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(nflClient))
+		r.Get("/games/{gameID}/plays", handlers.GamePlaysHandler(nflClient))
+		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(nflClient, espnClient))
 
 		// Teams
-		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(client))
+		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(nflClient, espnClient))
 	})
 
 	log.Printf("Server starting on :%s", cfg.Port)
