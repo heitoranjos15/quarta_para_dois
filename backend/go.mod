@@ -18,6 +18,7 @@ require (
 	github.com/apache/thrift v0.19.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-chi/chi v1.5.5 // indirect
+	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
