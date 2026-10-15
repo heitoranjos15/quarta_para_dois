@@ -285,6 +285,40 @@ func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
 	}
 }
 
+type DriveSummaryResponse struct {
+	Quarters map[int]aggregation.QuarterDriveSummary `json:"quarters"`
+	Overtime *aggregation.QuarterDriveSummary        `json:"overtime,omitempty"`
+}
+
+func GameDrivesHandler(client nflverseClientInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		gameID := chi.URLParam(r, "gameID")
+		season := extractSeason(gameID)
+
+		plays, err := client.GetPBP(season)
+		if err != nil {
+			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
+			return
+		}
+
+		gamePlays := filterPlaysByGame(plays, gameID)
+		if len(gamePlays) == 0 {
+			respondError(w, "game not found", http.StatusNotFound)
+			return
+		}
+
+		// Get home and away teams from the first play
+		homeTeam := gamePlays[0].HomeTeam
+		awayTeam := gamePlays[0].AwayTeam
+
+		quarters := aggregation.ComputeDrives(gamePlays, homeTeam, awayTeam)
+		response := DriveSummaryResponse{
+			Quarters: quarters,
+		}
+		respond(w, response, true, season, http.StatusOK)
+	}
+}
+
 func GameNotesHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")

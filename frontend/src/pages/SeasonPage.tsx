@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useWeeks } from '../hooks/useGames';
 import { Loading } from '../components/ui/Loading';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
 
 export function SeasonPage() {
   const params = useParams();
@@ -10,11 +11,14 @@ export function SeasonPage() {
   if (isLoading) return <Loading size="lg" />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Quarta Para Dois - NFL Analytics</h1>
-          <p className="text-gray-500 mt-1">Season {season}</p>
+    <div className="min-h-screen bg-[var(--bg-primary)]">
+      <header className="bg-[var(--bg-secondary)] shadow-sm border-b border-[var(--border-color)]">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Quarta Para Dois - NFL Analytics</h1>
+            <p className="text-[var(--text-secondary)] mt-1">Season {season}</p>
+          </div>
+          <ThemeToggle />
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 py-8">
@@ -23,13 +27,13 @@ export function SeasonPage() {
             <Link
               key={week}
               to={`/season/${season}/week/${week}`}
-              className="bg-white rounded-lg border border-gray-200 p-6 text-center hover:shadow-md hover:border-blue-300 transition-all"
+              className="week-card"
             >
-              <span className="text-3xl font-bold text-gray-900">Week {week}</span>
+              <span className="text-3xl font-bold text-[var(--text-primary)]">Week {week}</span>
             </Link>
           ))}
           {(!weeks || weeks.length === 0) && (
-            <div className="col-span-full text-center text-gray-500 py-12">
+            <div className="col-span-full text-center text-[var(--text-muted)] py-12">
               No weeks found for this season
             </div>
           )}

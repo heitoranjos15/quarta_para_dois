@@ -57,11 +57,12 @@ func main() {
 		r.Get("/seasons/{year}/weeks", handlers.SeasonsWeeksHandler)
 		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler)
 
-		// Games
-		r.Get("/games/{gameID}", handlers.GameDetailHandler(nflClient, espnClient))
+		// Games - specific routes first (chi matches in order)
 		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(nflClient))
 		r.Get("/games/{gameID}/plays", handlers.GamePlaysHandler(nflClient))
+		r.Get("/games/{gameID}/drives", handlers.GameDrivesHandler(nflClient))
 		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(nflClient, espnClient))
+		r.Get("/games/{gameID}", handlers.GameDetailHandler(nflClient, espnClient))
 
 		// Teams
 		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(nflClient, espnClient))

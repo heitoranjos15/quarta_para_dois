@@ -31,3 +31,15 @@ export function useGame(gameId: string) {
     enabled: !!gameId,
   });
 }
+
+export function useGameInfo(gameId: string) {
+  return useGame(gameId);
+}
+
+export function useGameNotes(gameId: string) {
+  return useQuery({
+    queryKey: ['gameNotes', gameId],
+    queryFn: () => api.getGameNotes(gameId),
+    enabled: !!gameId,
+  });
+}

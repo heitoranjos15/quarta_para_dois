@@ -11,7 +11,7 @@ export function GameCard({ game }: { game: Game }) {
   const isHomeWinner = game.home_score > game.away_score;
 
   return (
-    <article className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+    <article data-testid="game-card" data-game-id={game.game_id} className="game-card">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full p-4 flex items-center justify-between text-left"
@@ -19,21 +19,21 @@ export function GameCard({ game }: { game: Game }) {
       >
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <TeamLogo team={game.away_team} size="lg" />
-          <div className={clsx('text-right min-w-[60px]', !isHomeWinner && 'text-blue-600')}>
+          <div className={clsx('text-right min-w-[60px]', !isHomeWinner && 'team-score-winner', isHomeWinner && 'team-score-loser')}>
             <p className="font-bold text-lg">{game.away_score}</p>
-            <p className="text-sm text-gray-500 truncate">{game.away_team}</p>
+            <p className="text-sm text-[var(--text-muted)] truncate">{game.away_team}</p>
           </div>
-          <span className="text-xl font-bold text-gray-700 px-4 flex-shrink-0">×</span>
-          <div className={clsx('text-left min-w-[60px]', isHomeWinner && 'text-blue-600')}>
+          <span className="text-xl font-bold text-[var(--text-muted)] px-4 flex-shrink-0">×</span>
+          <div className={clsx('text-left min-w-[60px]', isHomeWinner && 'team-score-winner', !isHomeWinner && 'team-score-loser')}>
             <p className="font-bold text-lg">{game.home_score}</p>
-            <p className="text-sm text-gray-500 truncate">{game.home_team}</p>
+            <p className="text-sm text-[var(--text-muted)] truncate">{game.home_team}</p>
           </div>
           <TeamLogo team={game.home_team} size="lg" />
         </div>
         <ChevronIcon className={clsx(expanded && 'rotate-180')} />
       </button>
       {expanded && (
-        <div className="border-t bg-gray-50 px-4 py-3">
+        <div className="game-card-expanded px-4 py-3">
           <Link to={`/game/${game.game_id}`}>
             <Button variant="primary" className="w-full">
               View Game Details
