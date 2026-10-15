@@ -4,7 +4,7 @@ import type {
   TeamComparisonStatsAPI,
   PlayByPlayResponseAPI,
   GameNotesAPI,
-  DriveSummaryResponse,
+  DriveSummaryResponseAPI,
   APIResponse,
 } from './types';
 import {
@@ -12,6 +12,7 @@ import {
   mapTeamComparisonStats,
   mapPlayDetail,
   mapGameNotes,
+  mapDriveSummary,
 } from './types';
 
 const api = ky.create({
@@ -73,5 +74,6 @@ export const getGameNotes = (gameId: string) =>
 export const getDrives = (gameId: string) =>
   api
     .get(`api/games/${gameId}/drives`)
-    .json<APIResponse<DriveSummaryResponse>>()
-    .then(extractData);
+    .json<APIResponse<DriveSummaryResponseAPI>>()
+    .then(extractData)
+    .then(mapDriveSummary);

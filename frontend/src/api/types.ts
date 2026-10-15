@@ -215,6 +215,44 @@ export interface DriveSummaryResponse {
   overtime?: QuarterDriveSummary;
 }
 
+interface DriveDetailAPI extends Omit<DriveDetail, 'plays'> {
+  plays: PlayDetailAPI[] | null;
+}
+
+interface QuarterDriveSummaryAPI {
+  drives: DriveDetailAPI[] | null;
+  total: QuarterDriveSummary['total'] | null;
+}
+
+export interface DriveSummaryResponseAPI {
+  quarters: Record<number, QuarterDriveSummaryAPI> | null;
+  overtime?: QuarterDriveSummaryAPI | null;
+}
+
+function mapQuarterDriveSummary(q: QuarterDriveSummaryAPI): QuarterDriveSummary {
+  return {
+    drives: (q.drives ?? []).map((d) => ({
+      ...d,
+      plays: (d.plays ?? []).map(mapPlayDetail),
+    })),
+    total: q.total ?? {
+      home: { drives: 0, points: 0, time_of_possession: '0:00', yards: 0 },
+      away: { drives: 0, points: 0, time_of_possession: '0:00', yards: 0 },
+    },
+  };
+}
+
+export function mapDriveSummary(api: DriveSummaryResponseAPI): DriveSummaryResponse {
+  const quarters: Record<number, QuarterDriveSummary> = {};
+  Object.entries(api.quarters ?? {}).forEach(([q, summary]) => {
+    quarters[Number(q)] = mapQuarterDriveSummary(summary);
+  });
+  return {
+    quarters,
+    overtime: api.overtime ? mapQuarterDriveSummary(api.overtime) : undefined,
+  };
+}
+
 export interface GameNotesAPI {
   weather: WeatherInfoAPI;
   vegas: VegasInfoAPI;

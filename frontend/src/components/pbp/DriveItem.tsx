@@ -26,7 +26,7 @@ export function DriveItem({ drive, index }: DriveItemProps) {
             {drive.team}
           </span>
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            {drive.start_yardline} \u2192 {drive.end_yardline}
+            {drive.start_yardline} → {drive.end_yardline}
           </span>
           <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
             {drive.yards} yds
