@@ -97,12 +97,19 @@ export function PlayByPlayTable({ plays }: { plays: PlayDetail[] }) {
 
 - [ ] **Step 4: Verify with real data**
 
-- [ ] **Step 5: Create feature branch**
+- [ ] **Step 5: Add Playwright test scenarios** for Play-by-Play tab
+  - [ ] Test quarter accordions expand/collapse
+  - [ ] Test quarter filter tabs (All/Q1/Q2/Q3/Q4)
+  - [ ] Test play row displays down/distance, play type, description, EPA
+  - [ ] Test scoring play badge displays
+  - [ ] Test play-by-play tab navigation
+
+- [ ] **Step 6: Create feature branch**
 ```bash
 git checkout -b feat/game-detail-pbp
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 ```bash
 git add frontend/src/components/pbp/
 git commit -m "feat: play-by-play tab with quarter accordions"

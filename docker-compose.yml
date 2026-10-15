@@ -15,9 +15,6 @@ services:
       - ENV=development
     depends_on:
       - redis
-    volumes:
-      - ./backend:/app
-      - /app/go/pkg/mod
 
   redis:
     image: redis:7-alpine
@@ -34,7 +31,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8080
+      - VITE_API_URL=http://api:8080
     volumes:
       - ./frontend:/app
       - /app/node_modules
