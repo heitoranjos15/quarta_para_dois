@@ -429,3 +429,19 @@ func TestComputeTeamStats_TOP(t *testing.T) {
 
 	assert.Equal(t, 8*time.Minute+37*time.Second, stats.TimeOfPossession)
 }
+
+func TestComputeTeamStats_ExtraPointIsNotARedZoneTrip(t *testing.T) {
+	plays := []nflverse.Play{
+		// a 75-yard touchdown, then the extra point snapped from the 15
+		offensePlay(nflverse.Play{PlayType: "pass", FixedDrive: 1, Yardline100: 75, EPA: f64(4), FixedDriveResult: "Touchdown"}),
+		offensePlay(nflverse.Play{PlayType: "extra_point", FixedDrive: 1, Yardline100: 15, FixedDriveResult: "Touchdown"}),
+		// a 60-yard touchdown, then a two-point try from the 2 (nflverse types it as a pass)
+		offensePlay(nflverse.Play{PlayType: "pass", FixedDrive: 2, Yardline100: 60, EPA: f64(4), FixedDriveResult: "Touchdown"}),
+		offensePlay(nflverse.Play{PlayType: "pass", FixedDrive: 2, Yardline100: 2, TwoPointConvResult: "success", FixedDriveResult: "Touchdown"}),
+	}
+
+	stats := ComputeTeamStats(plays).HomeOffense
+
+	assert.Equal(t, 0, stats.RedZoneTrips)
+	assert.Equal(t, 0, stats.RedZoneTDs)
+}

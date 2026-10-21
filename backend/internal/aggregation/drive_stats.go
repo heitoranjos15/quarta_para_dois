@@ -65,10 +65,11 @@ func ComputeDrives(plays []nflverse.Play, homeTeam, awayTeam string) map[int]Qua
 		}
 	}
 
+	lastQuarter := lastGameQuarter(plays)
 	byQuarter := make(map[int][]DriveDetail)
 	for _, drivePlays := range byDrive {
 		sort.Slice(drivePlays, func(i, j int) bool { return drivePlays[i].PlayID < drivePlays[j].PlayID })
-		detail := computeDriveDetail(drivePlays)
+		detail := computeDriveDetail(drivePlays, lastQuarter)
 		quarter := driveStartQuarter(drivePlays)
 		byQuarter[quarter] = append(byQuarter[quarter], detail)
 	}
@@ -79,6 +80,15 @@ func ComputeDrives(plays []nflverse.Play, homeTeam, awayTeam string) map[int]Qua
 		result[quarter] = summarizeQuarter(details, homeTeam, awayTeam)
 	}
 	return result
+}
+
+// lastGameQuarter is the last quarter the game reached (5 or more means overtime).
+func lastGameQuarter(plays []nflverse.Play) int {
+	last := 0
+	for _, p := range plays {
+		last = max(last, p.Quarter, p.DriveQuarterEnd)
+	}
+	return last
 }
 
 func driveStartQuarter(plays []nflverse.Play) int {
@@ -119,8 +129,9 @@ func addDrive(total *TeamDriveTotal, dd DriveDetail) {
 	total.TimeOfPossession = addTimeOfPossession(total.TimeOfPossession, dd.TimeOfPossession)
 }
 
-// computeDriveDetail describes one drive. plays must be sorted by play id.
-func computeDriveDetail(plays []nflverse.Play) DriveDetail {
+// computeDriveDetail describes one drive. plays must be sorted by play id; lastQuarter is
+// the game's last quarter.
+func computeDriveDetail(plays []nflverse.Play, lastQuarter int) DriveDetail {
 	if len(plays) == 0 {
 		return DriveDetail{}
 	}
@@ -150,7 +161,7 @@ func computeDriveDetail(plays []nflverse.Play) DriveDetail {
 		})
 	}
 
-	result := driveResult(firstNonEmpty(plays, func(p nflverse.Play) string { return p.FixedDriveResult }), plays)
+	result := driveResult(firstNonEmpty(plays, func(p nflverse.Play) string { return p.FixedDriveResult }), plays, lastQuarter)
 
 	return DriveDetail{
 		DriveID:            firstPlay.FixedDrive,
@@ -178,8 +189,9 @@ func firstNonEmpty(plays []nflverse.Play, get func(nflverse.Play) string) string
 }
 
 // driveResult maps nflverse's fixed_drive_result to a DriveEndReason. plays must be the
-// drive's plays in order; they decide what a generic "Turnover" was.
-func driveResult(fixedDriveResult string, plays []nflverse.Play) DriveEndReason {
+// drive's plays in order; they decide what a generic "Turnover" was. lastQuarter is the
+// game's last quarter, so the end of regulation before overtime isn't the end of the game.
+func driveResult(fixedDriveResult string, plays []nflverse.Play, lastQuarter int) DriveEndReason {
 	switch fixedDriveResult {
 	case "Touchdown":
 		return DriveEndTouchdown
@@ -196,8 +208,10 @@ func driveResult(fixedDriveResult string, plays []nflverse.Play) DriveEndReason 
 	case "Turnover", "Opp touchdown":
 		return turnoverKind(plays)
 	case "End of half":
-		if len(plays) > 0 && plays[len(plays)-1].DriveQuarterEnd >= 4 {
-			return DriveEndEndOfGame
+		if len(plays) > 0 {
+			if end := plays[len(plays)-1].DriveQuarterEnd; end >= 4 && end >= lastQuarter {
+				return DriveEndEndOfGame
+			}
 		}
 		return DriveEndEndOfHalf
 	}

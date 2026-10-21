@@ -156,7 +156,7 @@ func computeUnitStats(allPlays []nflverse.Play) TeamUnitStats {
 	return stats
 }
 
-// redZoneTrips counts drives with a play inside the 20, and those that ended in a touchdown.
+// redZoneTrips counts drives with a scrimmage play inside the 20, and those that ended in a touchdown.
 func redZoneTrips(plays []nflverse.Play) (trips, tds int) {
 	reached := map[int]bool{}
 	result := map[int]string{}
@@ -164,7 +164,8 @@ func redZoneTrips(plays []nflverse.Play) (trips, tds int) {
 		if p.FixedDrive <= 0 {
 			continue
 		}
-		if p.Yardline100 > 0 && p.Yardline100 <= 20 {
+		// Tries after a touchdown are snapped from the 15 or the 2; they aren't trips.
+		if isScrimmage(p) && p.TwoPointConvResult == "" && p.Yardline100 > 0 && p.Yardline100 <= 20 {
 			reached[p.FixedDrive] = true
 		}
 		if p.FixedDriveResult != "" {

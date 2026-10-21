@@ -380,9 +380,11 @@ func TestAddTimeOfPossession(t *testing.T) {
 // mirrors drive, and every play of a drive carries the drive's result and starting quarter.
 func withFixedDrives(plays []nflverse.Play) []nflverse.Play {
 	results := map[int]string{1: "Touchdown", 2: "Turnover", 3: "Punt"}
+	times := map[int]string{1: "2:40", 2: "1:15", 3: "0:45"}
 	for i := range plays {
 		plays[i].FixedDrive = plays[i].Drive
 		plays[i].FixedDriveResult = results[plays[i].Drive]
+		plays[i].DriveTimeOfPossession = times[plays[i].Drive]
 		plays[i].DriveQuarterStart = plays[i].Quarter
 		plays[i].DriveQuarterEnd = plays[i].Quarter
 	}
@@ -528,4 +530,28 @@ func TestComputeDrives_TimeOfPossessionFromNflverse(t *testing.T) {
 	drive, _ := onlyDrive(t, plays)
 
 	assert.Equal(t, "2:35", drive.TimeOfPossession)
+}
+
+func TestComputeDrives_EndOfRegulationBeforeOvertime(t *testing.T) {
+	regulation := onePlayDrive("End of half",
+		nflverse.Play{PlayType: "qb_kneel", Down: 1, Quarter: 4},
+	)
+	overtime := onePlayDrive("Field goal",
+		nflverse.Play{PlayType: "field_goal", Down: 4, Quarter: 5, FieldGoalResult: "made"},
+	)
+	overtime[0].FixedDrive, overtime[0].PlayID = 2, 10
+
+	quarters := ComputeDrives(append(regulation, overtime...), "GB", "DAL")
+
+	require.Contains(t, quarters, 4)
+	assert.Equal(t, "END_OF_HALF", quarters[4].Drives[0].Result, "the game went on to overtime")
+	assert.Equal(t, "FIELD_GOAL", quarters[5].Drives[0].Result)
+}
+
+func TestComputeDrives_EndOfRegulationIsEndOfGame(t *testing.T) {
+	drive, _ := onlyDrive(t, onePlayDrive("End of half",
+		nflverse.Play{PlayType: "qb_kneel", Down: 1, Quarter: 4},
+	))
+
+	assert.Equal(t, "END_OF_GAME", drive.Result)
 }

@@ -310,7 +310,7 @@ func TestProcessPlays_DriveGrouping(t *testing.T) {
 	assert.Equal(t, 4, drive.PlayCount) // 4 plays in drive 1
 	assert.Equal(t, 53, drive.Yards)    // 15+5+8+25
 	assert.Equal(t, "TOUCHDOWN", drive.Result)
-	assert.Greater(t, drive.TOP, time.Duration(0))
+	assert.Equal(t, 2*time.Minute+40*time.Second, drive.TOP)
 }
 
 func TestProcessPlays_EmptyPlays(t *testing.T) {
@@ -348,4 +348,30 @@ func TestProcessPlays_UsesSameDriveResult(t *testing.T) {
 	require.Len(t, quarters, 1)
 	require.Len(t, quarters[0].Drives, 1)
 	assert.Equal(t, "PUNT", quarters[0].Drives[0].Result)
+}
+
+func TestProcessPlays_CrossQuarterDriveIsOneDrive(t *testing.T) {
+	plays := onePlayDrive("Field goal",
+		nflverse.Play{PlayType: "pass", Down: 1, Quarter: 1, YardsGained: 30},
+		nflverse.Play{PlayType: "run", Down: 1, Quarter: 2, YardsGained: 25},
+		nflverse.Play{PlayType: "field_goal", Down: 4, Quarter: 2, FieldGoalResult: "made"},
+	)
+	for i := range plays {
+		plays[i].DriveQuarterStart, plays[i].DriveQuarterEnd = 1, 2
+		plays[i].DriveTimeOfPossession = "4:10"
+	}
+
+	quarters := ProcessPlays(plays)
+
+	require.Len(t, quarters, 2)
+	require.Len(t, quarters[0].Drives, 1, "listed in the quarter it started")
+	assert.Empty(t, quarters[1].Drives)
+	for _, q := range quarters {
+		for _, p := range q.Plays {
+			assert.Equal(t, 3, p.DrivePlayCount)
+			assert.Equal(t, 55, p.DriveYards)
+			assert.Equal(t, "FIELD_GOAL", p.DriveResult)
+			assert.Equal(t, 4*time.Minute+10*time.Second, p.DriveTOP)
+		}
+	}
 }
