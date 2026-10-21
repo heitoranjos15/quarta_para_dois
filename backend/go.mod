@@ -4,12 +4,12 @@ go 1.26.0
 
 require (
 	github.com/apache/arrow/go/v16 v16.1.0
-	github.com/go-chi/chi/v4 v4.1.3
+	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/cors v1.2.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/net v0.60.0
+	golang.org/x/sync v0.24.0
 )
 
 require (
@@ -17,8 +17,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/apache/thrift v0.19.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/go-chi/chi v1.5.5 // indirect
-	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -34,7 +32,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
 	golang.org/x/text v0.42.0 // indirect

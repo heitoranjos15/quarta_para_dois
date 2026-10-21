@@ -8,8 +8,8 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	os.Setenv("REDIS_ADDR", "localhost:6379")
-	os.Setenv("PORT", "8080")
+	_ = os.Setenv("REDIS_ADDR", "localhost:6379")
+	_ = os.Setenv("PORT", "8080")
 	cfg, err := Load()
 	assert.NoError(t, err)
 	assert.Equal(t, "localhost:6379", cfg.RedisAddr)

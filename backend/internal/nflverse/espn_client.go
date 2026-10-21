@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	espnBaseURL    = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-	espnCacheTTL   = 24 * time.Hour
-	espnCacheKey   = "espn:schedule:%d:%d" // season:week
+	espnBaseURL  = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+	espnCacheTTL = 24 * time.Hour
+	espnCacheKey = "espn:schedule:%d:%d" // season:week
 )
 
 type ESPNGamesResponse struct {
@@ -37,8 +37,8 @@ type ESPNLeague struct {
 	UID    string `json:"uid"`
 	Name   string `json:"name"`
 	Season struct {
-		Year int         `json:"year"`
-		Type ESPNType    `json:"type"`
+		Year int      `json:"year"`
+		Type ESPNType `json:"type"`
 	} `json:"season"`
 }
 
@@ -59,19 +59,19 @@ type ESPNTeamScheduleResponse struct {
 }
 
 type ESPNEvent struct {
-	ID          string       `json:"id"`
-	Date        string       `json:"date"`
-	Name        string       `json:"name"`
-	ShortName   string       `json:"shortName"`
+	ID           string            `json:"id"`
+	Date         string            `json:"date"`
+	Name         string            `json:"name"`
+	ShortName    string            `json:"shortName"`
 	Competitions []ESPNCompetition `json:"competitions"`
-	Status      ESPNStatus   `json:"status"`
+	Status       ESPNStatus        `json:"status"`
 }
 
 type ESPNCompetition struct {
-	ID       string           `json:"id"`
-	Date     string           `json:"date"`
-	Status   ESPNStatus       `json:"status"`
-	Venue    ESPNVenue        `json:"venue"`
+	ID          string           `json:"id"`
+	Date        string           `json:"date"`
+	Status      ESPNStatus       `json:"status"`
+	Venue       ESPNVenue        `json:"venue"`
 	Competitors []ESPNCompetitor `json:"competitors"`
 }
 
@@ -93,8 +93,8 @@ type ESPNVenue struct {
 	ID       string `json:"id"`
 	FullName string `json:"fullName"`
 	Address  struct {
-		City    string `json:"city"`
-		State   string `json:"state"`
+		City  string `json:"city"`
+		State string `json:"state"`
 	} `json:"address"`
 }
 
@@ -110,7 +110,7 @@ func (c *ESPNCompetitor) GetScoreValue() float64 {
 	switch v := c.Score.(type) {
 	case string:
 		var val float64
-		fmt.Sscanf(v, "%f", &val)
+		_, _ = fmt.Sscanf(v, "%f", &val)
 		return val
 	case map[string]interface{}:
 		if val, ok := v["value"].(float64); ok {
@@ -123,19 +123,19 @@ func (c *ESPNCompetitor) GetScoreValue() float64 {
 }
 
 type ESPNScore struct {
-	Value         float64 `json:"value"`
-	DisplayValue  string  `json:"displayValue"`
+	Value        float64 `json:"value"`
+	DisplayValue string  `json:"displayValue"`
 }
 
 type ESPNTeam struct {
-	ID           string `json:"id"`
-	Abbreviation string `json:"abbreviation"`
-	DisplayName  string `json:"displayName"`
+	ID               string `json:"id"`
+	Abbreviation     string `json:"abbreviation"`
+	DisplayName      string `json:"displayName"`
 	ShortDisplayName string `json:"shortDisplayName"`
-	Location     string `json:"location"`
-	Name         string `json:"name"`
-	Logo         string `json:"logo"`
-	Color        string `json:"color"`
+	Location         string `json:"location"`
+	Name             string `json:"name"`
+	Logo             string `json:"logo"`
+	Color            string `json:"color"`
 }
 
 type ESPNClient struct {
@@ -155,22 +155,19 @@ func NewESPNClient(redisAddr, redisPassword string) *ESPNClient {
 }
 
 func (c *ESPNClient) GetSchedule(ctx context.Context, season, week int) ([]Game, error) {
-	fmt.Printf("DEBUG ESPN: GetSchedule called for season=%d week=%d\n", season, week)
 	cacheKey := fmt.Sprintf(espnCacheKey, season, week)
-	
+
 	// Try cache first
 	if cached, err := c.cache.Get(ctx, cacheKey).Bytes(); err == nil {
 		var games []Game
 		if json.Unmarshal(cached, &games) == nil {
-			fmt.Printf("DEBUG ESPN: Cache hit for %s\n", cacheKey)
 			return games, nil
 		}
 	}
 
 	// Build ESPN URL
 	url := fmt.Sprintf("%s?seasontype=2&week=%d&dates=%d", espnBaseURL, week, season)
-	fmt.Printf("DEBUG ESPN: Fetching URL: %s\n", url)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -181,7 +178,7 @@ func (c *ESPNClient) GetSchedule(ctx context.Context, season, week int) ([]Game,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("ESPN API returned status %d", resp.StatusCode)
@@ -198,7 +195,7 @@ func (c *ESPNClient) GetSchedule(ctx context.Context, season, week int) ([]Game,
 	}
 
 	games := c.convertEvents(espnResp.Events, season, week)
-	
+
 	// Cache the result
 	if data, err := json.Marshal(games); err == nil {
 		c.cache.Set(ctx, cacheKey, data, espnCacheTTL)
@@ -221,7 +218,7 @@ func (c *ESPNClient) GetGame(ctx context.Context, season, week int, gameID strin
 		}
 		return nil, nil
 	}
-	
+
 	games, err := c.GetSchedule(ctx, season, week)
 	if err != nil {
 		return nil, err
@@ -241,15 +238,16 @@ func (c *ESPNClient) convertEvents(events []ESPNEvent, season, week int) []Game 
 			continue
 		}
 		comp := e.Competitions[0]
-		
+
 		var homeTeam, awayTeam string
 		var homeScore, awayScore int
-		
+
 		for _, comp := range comp.Competitors {
-			if comp.HomeAway == "home" {
+			switch comp.HomeAway {
+			case "home":
 				homeTeam = comp.Team.Abbreviation
 				homeScore = int(comp.GetScoreValue())
-			} else if comp.HomeAway == "away" {
+			case "away":
 				awayTeam = comp.Team.Abbreviation
 				awayScore = int(comp.GetScoreValue())
 			}
@@ -277,7 +275,7 @@ func (c *ESPNClient) convertEvents(events []ESPNEvent, season, week int) []Game 
 
 func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]Game, error) {
 	cacheKey := fmt.Sprintf("espn:team:%s:%d", strings.ToLower(teamAbbr), season)
-	
+
 	// Try cache first
 	if cached, err := c.cache.Get(ctx, cacheKey).Bytes(); err == nil {
 		var games []Game
@@ -290,22 +288,21 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 	espnAbbr := map[string]string{
 		"ARI": "ari", "ATL": "atl", "BAL": "bal", "BUF": "buf",
 		"CAR": "car", "CHI": "chi", "CIN": "cin", "CLE": "cle",
-		"DAL": "dal", "DEN": "den", "DET": "det", "GB":  "gb",
-		"HOU": "hou", "IND": "ind", "JAX": "jax", "KC":  "kc",
-		"LV":  "lv",  "LAC": "lac", "LAR": "lar", "MIA": "mia",
-		"MIN": "min", "NE":  "ne",  "NO":  "no",  "NYG": "nyg",
-		"NYJ": "nyj", "PHI": "phi", "PIT": "pit", "SF":  "sf",
-		"SEA": "sea", "TB":  "tb",  "TEN": "ten", "WSH": "wsh",
+		"DAL": "dal", "DEN": "den", "DET": "det", "GB": "gb",
+		"HOU": "hou", "IND": "ind", "JAX": "jax", "KC": "kc",
+		"LV": "lv", "LAC": "lac", "LAR": "lar", "MIA": "mia",
+		"MIN": "min", "NE": "ne", "NO": "no", "NYG": "nyg",
+		"NYJ": "nyj", "PHI": "phi", "PIT": "pit", "SF": "sf",
+		"SEA": "sea", "TB": "tb", "TEN": "ten", "WSH": "wsh",
 	}
-	
+
 	espnTeam, ok := espnAbbr[strings.ToUpper(teamAbbr)]
 	if !ok {
 		return []Game{}, nil
 	}
-	
+
 	url := fmt.Sprintf("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/%s/schedule?season=%d", espnTeam, season)
-	fmt.Printf("DEBUG ESPN: Fetching team schedule URL: %s\n", url)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -316,7 +313,7 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("ESPN API returned status %d", resp.StatusCode)
@@ -329,14 +326,12 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 
 	var teamResp ESPNTeamScheduleResponse
 	if err := json.Unmarshal(body, &teamResp); err != nil {
-		fmt.Printf("DEBUG ESPN: JSON unmarshal error: %v\n", err)
 		return nil, err
 	}
-	fmt.Printf("DEBUG ESPN: Got %d events\n", len(teamResp.Events))
 
 	allEvents := teamResp.Events
 	games := c.convertEvents(allEvents, season, 0)
-	
+
 	// Filter to only include games for the specified season
 	var filtered []Game
 	for _, g := range games {
@@ -344,7 +339,7 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 			filtered = append(filtered, g)
 		}
 	}
-	
+
 	// Cache the result
 	if data, err := json.Marshal(filtered); err == nil {
 		c.cache.Set(ctx, cacheKey, data, espnCacheTTL)

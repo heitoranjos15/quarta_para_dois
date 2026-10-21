@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,21 +15,10 @@ import (
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
-const (
-	nflverseClientKey = "nflverseClient"
-	espnClientKey     = "espnClient"
-)
-
 type espnClientInterface interface {
 	GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error)
 	GetGame(ctx context.Context, season, week int, gameID string) (*nflverse.Game, error)
 	GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]nflverse.Game, error)
-}
-
-func getESPNClient(r *http.Request) (espnClientInterface, bool) {
-	client, ok := r.Context().Value(espnClientKey).(espnClientInterface)
-	fmt.Printf("DEBUG getESPNClient: key=%q, ok=%v, client=%v\n", espnClientKey, ok, client)
-	return client, ok
 }
 
 type APIResponse[T any] struct {
@@ -85,13 +74,17 @@ func respond[T any](w http.ResponseWriter, data T, cached bool, season int, stat
 		Data: data,
 		Meta: Meta{Cached: cached, Season: season},
 	}
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("encode response", "err", err)
+	}
 }
 
 func respondError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+		slog.Error("encode error response", "err", err)
+	}
 }
 
 func extractSeason(gameID string) int {
@@ -153,39 +146,32 @@ func SeasonsWeeksHandler(w http.ResponseWriter, r *http.Request) {
 	respond(w, weeks, false, year, http.StatusOK)
 }
 
-func SeasonsGamesHandler(w http.ResponseWriter, r *http.Request) {
-	yearStr := chi.URLParam(r, "year")
-	weekStr := chi.URLParam(r, "week")
+func SeasonsGamesHandler(espnClient espnClientInterface) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		yearStr := chi.URLParam(r, "year")
+		weekStr := chi.URLParam(r, "week")
 
-	year, err := strconv.Atoi(yearStr)
-	if err != nil || year < 1999 {
-		respondError(w, "invalid season", http.StatusBadRequest)
-		return
+		year, err := strconv.Atoi(yearStr)
+		if err != nil || year < 1999 {
+			respondError(w, "invalid season", http.StatusBadRequest)
+			return
+		}
+
+		week, err := strconv.Atoi(weekStr)
+		if err != nil || week < 1 {
+			respondError(w, "invalid week", http.StatusBadRequest)
+			return
+		}
+
+		games, err := espnClient.GetSchedule(r.Context(), year, week)
+		if err != nil {
+			slog.Error("fetch schedule", "season", year, "week", week, "err", err)
+			respondError(w, "failed to fetch schedules", http.StatusServiceUnavailable)
+			return
+		}
+
+		respond(w, games, false, year, http.StatusOK)
 	}
-
-	week, err := strconv.Atoi(weekStr)
-	if err != nil || week < 1 {
-		respondError(w, "invalid week", http.StatusBadRequest)
-		return
-	}
-
-	espnClient, ok := getESPNClient(r)
-	if !ok {
-		respondError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Printf("DEBUG: Fetching schedule for %d week %d\n", year, week)
-	ctx := r.Context()
-	games, err := espnClient.GetSchedule(ctx, year, week)
-	if err != nil {
-		fmt.Printf("DEBUG: Error fetching schedule: %v\n", err)
-		respondError(w, "failed to fetch schedules", http.StatusServiceUnavailable)
-		return
-	}
-
-	fmt.Printf("DEBUG: Got %d games\n", len(games))
-	respond(w, games, false, year, http.StatusOK)
 }
 
 func GameDetailHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
@@ -196,6 +182,7 @@ func GameDetailHandler(nflClient nflverseClientInterface, espnClient espnClientI
 		ctx := r.Context()
 		game, err := espnClient.GetGame(ctx, season, 0, gameID) // week=0 means search all weeks
 		if err != nil {
+			slog.Error("fetch game", "game_id", gameID, "err", err)
 			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
 			return
 		}
@@ -216,6 +203,7 @@ func GameStatsHandler(client nflverseClientInterface) http.HandlerFunc {
 
 		plays, err := client.GetPBP(season)
 		if err != nil {
+			slog.Error("fetch play data", "game_id", gameID, "err", err)
 			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
 			return
 		}
@@ -242,6 +230,7 @@ func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
 
 		plays, err := client.GetPBP(season)
 		if err != nil {
+			slog.Error("fetch play data", "game_id", gameID, "err", err)
 			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
 			return
 		}
@@ -297,6 +286,7 @@ func GameDrivesHandler(client nflverseClientInterface) http.HandlerFunc {
 
 		plays, err := client.GetPBP(season)
 		if err != nil {
+			slog.Error("fetch play data", "game_id", gameID, "err", err)
 			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
 			return
 		}
@@ -327,6 +317,7 @@ func GameNotesHandler(nflClient nflverseClientInterface, espnClient espnClientIn
 		ctx := r.Context()
 		game, err := espnClient.GetGame(ctx, season, 0, gameID)
 		if err != nil {
+			slog.Error("fetch game", "game_id", gameID, "err", err)
 			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
 			return
 		}
@@ -359,7 +350,7 @@ func TeamGamesHandler(nflClient nflverseClientInterface, espnClient espnClientIn
 	return func(w http.ResponseWriter, r *http.Request) {
 		teamAbbr := chi.URLParam(r, "abbr")
 		seasonStr := r.URL.Query().Get("season")
-		
+
 		season := time.Now().Year()
 		if time.Now().Month() < 9 {
 			season--
@@ -369,15 +360,15 @@ func TeamGamesHandler(nflClient nflverseClientInterface, espnClient espnClientIn
 				season = s
 			}
 		}
-		
+
 		ctx := r.Context()
 		games, err := espnClient.GetTeamSchedule(ctx, teamAbbr, season)
 		if err != nil {
+			slog.Error("fetch team schedule", "team", teamAbbr, "season", season, "err", err)
 			respondError(w, "failed to fetch team schedule", http.StatusServiceUnavailable)
 			return
 		}
-		
+
 		respond(w, games, false, season, http.StatusOK)
 	}
 }
-

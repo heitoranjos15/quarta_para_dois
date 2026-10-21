@@ -34,11 +34,11 @@ func (m *mockNFLVerseClient) GetSchedules(season int) ([]nflverse.Game, error) {
 	}
 	return []nflverse.Game{
 		{
-			GameID:   "2024_01_LAC_DEN",
-			Season:   2024,
-			Week:     1,
-			HomeTeam: "LAC",
-			AwayTeam: "DEN",
+			GameID:    "2024_01_LAC_DEN",
+			Season:    2024,
+			Week:      1,
+			HomeTeam:  "LAC",
+			AwayTeam:  "DEN",
 			HomeScore: 27,
 			AwayScore: 20,
 		},
@@ -63,9 +63,9 @@ func (m *mockNFLVerseClient) GetRosters(season int) ([]nflverse.Roster, error) {
 }
 
 type mockESPNClient struct {
-	schedule []nflverse.Game
+	schedule   []nflverse.Game
 	shouldFail bool
-	err error
+	err        error
 }
 
 func (m *mockESPNClient) GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error) {
@@ -98,58 +98,58 @@ func setupTestRouter() *chi.Mux {
 	client := &mockNFLVerseClient{
 		pbpData: []nflverse.Play{
 			{
-				PlayID:             1,
-				GameID:             "2024_01_LAC_DEN",
-				Quarter:            1,
-				Down:               1,
-				YardsToGo:          10,
-				PlayType:           "pass",
-				Description:        "Herbert pass complete to Williams for 15 yards",
-				EPA:                1.2,
-				Posteam:            "LAC",
-				Defteam:            "DEN",
-				Yardline100:        75,
-				YardsGained:        15,
-				PassAttempt:        1,
-				RushAttempt:        0,
-				CompletePass:       1,
-				Touchdown:          0,
-				PasserPlayerName:   "J.Herbert",
-				ReceiverPlayerName: "M.Williams",
-				RusherPlayerName:   "",
-				TacklerPlayerName:  "P.Surtain",
-				ThirdDownConverted: 0,
+				PlayID:               1,
+				GameID:               "2024_01_LAC_DEN",
+				Quarter:              1,
+				Down:                 1,
+				YardsToGo:            10,
+				PlayType:             "pass",
+				Description:          "Herbert pass complete to Williams for 15 yards",
+				EPA:                  1.2,
+				Posteam:              "LAC",
+				Defteam:              "DEN",
+				Yardline100:          75,
+				YardsGained:          15,
+				PassAttempt:          1,
+				RushAttempt:          0,
+				CompletePass:         1,
+				Touchdown:            0,
+				PasserPlayerName:     "J.Herbert",
+				ReceiverPlayerName:   "M.Williams",
+				RusherPlayerName:     "",
+				TacklerPlayerName:    "P.Surtain",
+				ThirdDownConverted:   0,
 				GameSecondsRemaining: 3600,
-				Drive:              1,
-				HomeTeam:           "LAC",
-				AwayTeam:           "DEN",
+				Drive:                1,
+				HomeTeam:             "LAC",
+				AwayTeam:             "DEN",
 			},
 			{
-				PlayID:             2,
-				GameID:             "2024_01_LAC_DEN",
-				Quarter:            1,
-				Down:               1,
-				YardsToGo:          10,
-				PlayType:           "run",
-				Description:        "Ekeler rush for 5 yards",
-				EPA:                0.3,
-				Posteam:            "LAC",
-				Defteam:            "DEN",
-				Yardline100:        60,
-				YardsGained:        5,
-				PassAttempt:        0,
-				RushAttempt:        1,
-				CompletePass:       0,
-				Touchdown:          0,
-				PasserPlayerName:   "",
-				ReceiverPlayerName: "",
-				RusherPlayerName:   "A.Ekeler",
-				TacklerPlayerName:  "J.Simmons",
-				ThirdDownConverted: 0,
+				PlayID:               2,
+				GameID:               "2024_01_LAC_DEN",
+				Quarter:              1,
+				Down:                 1,
+				YardsToGo:            10,
+				PlayType:             "run",
+				Description:          "Ekeler rush for 5 yards",
+				EPA:                  0.3,
+				Posteam:              "LAC",
+				Defteam:              "DEN",
+				Yardline100:          60,
+				YardsGained:          5,
+				PassAttempt:          0,
+				RushAttempt:          1,
+				CompletePass:         0,
+				Touchdown:            0,
+				PasserPlayerName:     "",
+				ReceiverPlayerName:   "",
+				RusherPlayerName:     "A.Ekeler",
+				TacklerPlayerName:    "J.Simmons",
+				ThirdDownConverted:   0,
 				GameSecondsRemaining: 3560,
-				Drive:              1,
-				HomeTeam:           "LAC",
-				AwayTeam:           "DEN",
+				Drive:                1,
+				HomeTeam:             "LAC",
+				AwayTeam:             "DEN",
 			},
 		},
 	}
@@ -157,11 +157,11 @@ func setupTestRouter() *chi.Mux {
 	espnClient := &mockESPNClient{
 		schedule: []nflverse.Game{
 			{
-				GameID:   "2024_01_LAC_DEN",
-				Season:   2024,
-				Week:     1,
-				HomeTeam: "LAC",
-				AwayTeam: "DEN",
+				GameID:    "2024_01_LAC_DEN",
+				Season:    2024,
+				Week:      1,
+				HomeTeam:  "LAC",
+				AwayTeam:  "DEN",
 				HomeScore: 27,
 				AwayScore: 20,
 			},
@@ -169,18 +169,10 @@ func setupTestRouter() *chi.Mux {
 	}
 
 	r := chi.NewRouter()
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, nflverseClientKey, client)
-			ctx = context.WithValue(ctx, espnClientKey, espnClient)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	})
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/seasons", SeasonsListHandler)
 		r.Get("/seasons/{year}/weeks", SeasonsWeeksHandler)
-		r.Get("/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler)
+		r.Get("/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler(espnClient))
 		r.Get("/games/{gameID}", GameDetailHandler(client, espnClient))
 		r.Get("/games/{gameID}/stats", GameStatsHandler(client))
 		r.Get("/games/{gameID}/plays", GamePlaysHandler(client))
@@ -198,7 +190,7 @@ func TestSeasonsListHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[[]int]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 	assert.Greater(t, len(resp.Data), 0)
 	assert.Contains(t, resp.Data, 2024)
@@ -212,7 +204,7 @@ func TestSeasonsWeeksHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[[]int]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 	assert.Contains(t, resp.Data, 1)
 }
@@ -225,7 +217,7 @@ func TestSeasonsGamesHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[[]nflverse.Game]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 	assert.Len(t, resp.Data, 1)
 	assert.Equal(t, "2024_01_LAC_DEN", resp.Data[0].GameID)
@@ -239,7 +231,7 @@ func TestGameDetailHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[nflverse.Game]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 	assert.Equal(t, "2024_01_LAC_DEN", resp.Data.GameID)
 }
@@ -252,7 +244,7 @@ func TestGameStatsHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[aggregation.TeamComparisonStats]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NotNil(t, resp.Data)
 	assert.Equal(t, "LAC", resp.Data.HomeTeam)
 	assert.Equal(t, "DEN", resp.Data.AwayTeam)
@@ -267,7 +259,7 @@ func TestGamePlaysHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[[]aggregation.QuarterPlays]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NotNil(t, resp.Data)
 	assert.Len(t, resp.Data, 1) // Only Q1 in test data
 	assert.Len(t, resp.Data[0].Plays, 2)
@@ -281,7 +273,7 @@ func TestGameNotesHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[GameNotes]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 }
 
@@ -293,7 +285,7 @@ func TestTeamGamesHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[[]nflverse.Game]
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 }
 

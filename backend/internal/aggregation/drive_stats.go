@@ -11,31 +11,31 @@ import (
 type DriveEndReason string
 
 const (
-	DriveEndPunt           DriveEndReason = "PUNT"
-	DriveEndDowns          DriveEndReason = "DOWNS"
-	DriveEndInterception   DriveEndReason = "INTERCEPTION"
-	DriveEndFumbleLost     DriveEndReason = "FUMBLE_LOST"
-	DriveEndFieldGoal      DriveEndReason = "FIELD_GOAL"
-	DriveEndExtraPoint     DriveEndReason = "EXTRA_POINT"
-	DriveEndTouchdown      DriveEndReason = "TOUCHDOWN"
-	DriveEndSafety         DriveEndReason = "SAFETY"
-	DriveEndEndOfHalf      DriveEndReason = "END_OF_HALF"
-	DriveEndEndOfGame      DriveEndReason = "END_OF_GAME"
-	DriveEndOther          DriveEndReason = "OTHER"
+	DriveEndPunt         DriveEndReason = "PUNT"
+	DriveEndDowns        DriveEndReason = "DOWNS"
+	DriveEndInterception DriveEndReason = "INTERCEPTION"
+	DriveEndFumbleLost   DriveEndReason = "FUMBLE_LOST"
+	DriveEndFieldGoal    DriveEndReason = "FIELD_GOAL"
+	DriveEndExtraPoint   DriveEndReason = "EXTRA_POINT"
+	DriveEndTouchdown    DriveEndReason = "TOUCHDOWN"
+	DriveEndSafety       DriveEndReason = "SAFETY"
+	DriveEndEndOfHalf    DriveEndReason = "END_OF_HALF"
+	DriveEndEndOfGame    DriveEndReason = "END_OF_GAME"
+	DriveEndOther        DriveEndReason = "OTHER"
 )
 
 type DriveDetail struct {
-	DriveID             int           `json:"drive_id"`
-	Team                string        `json:"team"`
-	StartYardline       int           `json:"start_yardline"`
-	EndYardline         int           `json:"end_yardline"`
-	PlaysCount          int           `json:"plays_count"`
-	Yards               int           `json:"yards"`
-	TimeOfPossession    string        `json:"time_of_possession"`
-	Result              string        `json:"result"`
-	EndPlayDescription  string        `json:"end_play_description"`
-	EndPlayType         string        `json:"end_play_type"`
-	Plays               []PlayDetail  `json:"plays"`
+	DriveID            int          `json:"drive_id"`
+	Team               string       `json:"team"`
+	StartYardline      int          `json:"start_yardline"`
+	EndYardline        int          `json:"end_yardline"`
+	PlaysCount         int          `json:"plays_count"`
+	Yards              int          `json:"yards"`
+	TimeOfPossession   string       `json:"time_of_possession"`
+	Result             string       `json:"result"`
+	EndPlayDescription string       `json:"end_play_description"`
+	EndPlayType        string       `json:"end_play_type"`
+	Plays              []PlayDetail `json:"plays"`
 }
 
 type TeamDriveTotal struct {
@@ -46,7 +46,7 @@ type TeamDriveTotal struct {
 }
 
 type QuarterDriveSummary struct {
-	Drives []DriveDetail    `json:"drives"`
+	Drives []DriveDetail             `json:"drives"`
 	Total  map[string]TeamDriveTotal `json:"total"`
 }
 
@@ -108,12 +108,13 @@ func processQuarterDrives(quarter int, plays []nflverse.Play, homeTeam, awayTeam
 	awayTotal := TeamDriveTotal{}
 
 	for _, dd := range driveDetails {
-		if dd.Team == homeTeam {
+		switch dd.Team {
+		case homeTeam:
 			homeTotal.Drives++
 			homeTotal.Yards += dd.Yards
 			homeTotal.Points += drivePoints(dd.Result)
 			homeTotal.TimeOfPossession = addTimeOfPossession(homeTotal.TimeOfPossession, dd.TimeOfPossession)
-		} else if dd.Team == awayTeam {
+		case awayTeam:
 			awayTotal.Drives++
 			awayTotal.Yards += dd.Yards
 			awayTotal.Points += drivePoints(dd.Result)
@@ -145,20 +146,20 @@ func computeDriveDetail(plays []nflverse.Play) DriveDetail {
 	var playDetails []PlayDetail
 	for _, p := range plays {
 		detail := PlayDetail{
-			PlayID:         p.PlayID,
-			Quarter:        p.Quarter,
-			Down:           p.Down,
-			Distance:       p.YardsToGo,
-			Yardline:       p.Yardline100,
-			PlayType:       p.PlayType,
-			Description:    p.Description,
-			EPA:            p.EPA,
-			Passer:         p.PasserPlayerName,
-			Receiver:       p.ReceiverPlayerName,
-			Rusher:         p.RusherPlayerName,
-			Tackler:        p.TacklerPlayerName,
-			IsScoringPlay:  p.Touchdown == 1,
-			DriveID:        p.Drive,
+			PlayID:        p.PlayID,
+			Quarter:       p.Quarter,
+			Down:          p.Down,
+			Distance:      p.YardsToGo,
+			Yardline:      p.Yardline100,
+			PlayType:      p.PlayType,
+			Description:   p.Description,
+			EPA:           p.EPA,
+			Passer:        p.PasserPlayerName,
+			Receiver:      p.ReceiverPlayerName,
+			Rusher:        p.RusherPlayerName,
+			Tackler:       p.TacklerPlayerName,
+			IsScoringPlay: p.Touchdown == 1,
+			DriveID:       p.Drive,
 		}
 		playDetails = append(playDetails, detail)
 	}
@@ -288,7 +289,7 @@ func parseTime(t string) []int {
 	}
 	minutes := 0
 	seconds := 0
-	fmt.Sscanf(parts[0], "%d", &minutes)
-	fmt.Sscanf(parts[1], "%d", &seconds)
+	_, _ = fmt.Sscanf(parts[0], "%d", &minutes)
+	_, _ = fmt.Sscanf(parts[1], "%d", &seconds)
 	return []int{minutes, seconds}
 }

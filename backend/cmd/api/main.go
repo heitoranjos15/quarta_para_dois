@@ -1,10 +1,12 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -15,16 +17,33 @@ import (
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
-const (
-	nflverseClientKey = "nflverseClient"
-	espnClientKey     = "espnClient"
-)
+func newLogger(env string, w io.Writer) *slog.Logger {
+	if env == "production" {
+		return slog.New(slog.NewJSONHandler(w, nil))
+	}
+	return slog.New(slog.NewTextHandler(w, nil))
+}
+
+func newServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+}
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		panic(err)
+		slog.Error("load config", "err", err)
+		os.Exit(1)
 	}
+
+	logger := newLogger(cfg.Env, os.Stdout)
+	slog.SetDefault(logger)
 
 	cache := nflverse.NewRedisCache(cfg.RedisAddr, cfg.RedisPassword)
 	nflClient := nflverse.NewClient(cache, cfg.GitHubToken)
@@ -32,20 +51,9 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.Logger)
+	r.Use(middleware.RequestLogger(logger))
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.Cors)
-
-	// Add clients to request context
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Printf("DEBUG middleware: adding clients to context\n")
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, nflverseClientKey, nflClient)
-			ctx = context.WithValue(ctx, espnClientKey, espnClient)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	})
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
@@ -55,7 +63,7 @@ func main() {
 		// Seasons
 		r.Get("/seasons", handlers.SeasonsListHandler)
 		r.Get("/seasons/{year}/weeks", handlers.SeasonsWeeksHandler)
-		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler)
+		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler(espnClient))
 
 		// Games - specific routes first (chi matches in order)
 		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(nflClient))
@@ -68,6 +76,9 @@ func main() {
 		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(nflClient, espnClient))
 	})
 
-	log.Printf("Server starting on :%s", cfg.Port)
-	_ = http.ListenAndServe(":"+cfg.Port, r)
+	logger.Info("server starting", "port", cfg.Port)
+	if err := newServer(":"+cfg.Port, r).ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("server stopped", "err", err)
+		os.Exit(1)
+	}
 }

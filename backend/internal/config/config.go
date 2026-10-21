@@ -5,7 +5,7 @@ import (
 )
 
 type Config struct {
-	RedisAddr    string `envconfig:"REDIS_ADDR" default:"localhost:6379"`
+	RedisAddr     string `envconfig:"REDIS_ADDR" default:"localhost:6379"`
 	RedisPassword string `envconfig:"REDIS_PASSWORD" default:""`
 	GitHubToken   string `envconfig:"GITHUB_TOKEN" default:""`
 	Port          string `envconfig:"PORT" default:"8080"`

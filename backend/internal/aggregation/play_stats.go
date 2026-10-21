@@ -29,13 +29,13 @@ type PlayDetail struct {
 }
 
 type DriveSummary struct {
-	DriveID      int
+	DriveID       int
 	StartYardline int
 	EndYardline   int
-	Yards        int
-	PlayCount    int
-	Result       string
-	TOP          time.Duration
+	Yards         int
+	PlayCount     int
+	Result        string
+	TOP           time.Duration
 }
 
 type QuarterPlays struct {
@@ -81,7 +81,7 @@ func ProcessPlays(plays []nflverse.Play) []QuarterPlays {
 
 func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 	var playDetails []PlayDetail
-	
+
 	// Group plays by drive
 	driveMap := make(map[int][]nflverse.Play)
 	for _, p := range plays {
@@ -93,20 +93,20 @@ func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 	// Process each play
 	for _, p := range plays {
 		detail := PlayDetail{
-			PlayID:      p.PlayID,
-			Quarter:     p.Quarter,
-			Down:        p.Down,
-			Distance:    p.YardsToGo,
-			Yardline:    p.Yardline100,
-			PlayType:    p.PlayType,
-			Description: p.Description,
-			EPA:         p.EPA,
-			Passer:      p.PasserPlayerName,
-			Receiver:    p.ReceiverPlayerName,
-			Rusher:      p.RusherPlayerName,
-			Tackler:     p.TacklerPlayerName,
+			PlayID:        p.PlayID,
+			Quarter:       p.Quarter,
+			Down:          p.Down,
+			Distance:      p.YardsToGo,
+			Yardline:      p.Yardline100,
+			PlayType:      p.PlayType,
+			Description:   p.Description,
+			EPA:           p.EPA,
+			Passer:        p.PasserPlayerName,
+			Receiver:      p.ReceiverPlayerName,
+			Rusher:        p.RusherPlayerName,
+			Tackler:       p.TacklerPlayerName,
 			IsScoringPlay: p.Touchdown == 1,
-			DriveID:     p.Drive,
+			DriveID:       p.Drive,
 		}
 		playDetails = append(playDetails, detail)
 	}
@@ -154,8 +154,8 @@ func computeDriveSummary(plays []nflverse.Play) DriveSummary {
 	})
 
 	drive := DriveSummary{
-		DriveID:      plays[0].Drive,
-		PlayCount:    len(plays),
+		DriveID:       plays[0].Drive,
+		PlayCount:     len(plays),
 		StartYardline: plays[0].Yardline100,
 		EndYardline:   plays[len(plays)-1].Yardline100,
 	}

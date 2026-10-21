@@ -76,17 +76,17 @@ func TestClient_GetRosters(t *testing.T) {
 
 func TestClientCache_SetGet(t *testing.T) {
 	cache := NewRedisCache("localhost:6379", "")
-	
+
 	testKey := "test_key_" + time.Now().Format("150405.000")
 	testValue := "test_value"
-	
+
 	cache.Set(testKey, testValue, time.Minute)
 	var val string
 	ok := cache.Get(testKey, &val)
-	
+
 	assert.True(t, ok)
 	assert.Equal(t, testValue, val)
-	
+
 	cache.Delete(testKey)
 	ok = cache.Get(testKey, &val)
 	assert.False(t, ok)
