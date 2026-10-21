@@ -2,7 +2,7 @@ app = "quarta-para-dois-api"
 primary_region = "iad"
 
 [build]
-  dockerfile = "backend/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8080"
