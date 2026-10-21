@@ -7,18 +7,23 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"quarta-para-dois/backend/internal/aggregation"
+	"quarta-para-dois/backend/internal/games"
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
-type espnClientInterface interface {
-	GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error)
-	GetGame(ctx context.Context, season, week int, gameID string) (*nflverse.Game, error)
-	GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]nflverse.Game, error)
+// GameService serves the game list, schedule and per-game details.
+type GameService interface {
+	Seasons(ctx context.Context) ([]int, error)
+	Weeks(ctx context.Context, season int) ([]int, error)
+	Week(ctx context.Context, season, week int) ([]games.Game, error)
+	Game(ctx context.Context, gameID string) (games.Game, error)
+	TeamGames(ctx context.Context, abbr string, season int) ([]games.Game, error)
 }
 
 type APIResponse[T any] struct {
@@ -31,36 +36,14 @@ type Meta struct {
 	Season int  `json:"season"`
 }
 
+// GameNotes holds only what the sources actually provide; nothing is filled with placeholders.
 type GameNotes struct {
-	Weather  *WeatherInfo `json:"weather,omitempty"`
-	Injuries []InjuryInfo `json:"injuries,omitempty"`
-	Vegas    *VegasInfo   `json:"vegas,omitempty"`
+	Stadium string `json:"stadium"`
+	Roof    string `json:"roof"`
+	Surface string `json:"surface"`
+	Indoor  bool   `json:"indoor"`
 }
 
-type WeatherInfo struct {
-	Temperature int    `json:"temperature"`
-	Wind        int    `json:"wind"`
-	Condition   string `json:"condition"`
-	Stadium     string `json:"stadium"`
-	Roof        string `json:"roof"`
-}
-
-type InjuryInfo struct {
-	Player   string `json:"player"`
-	Team     string `json:"team"`
-	Position string `json:"position"`
-	Status   string `json:"status"`
-	Detail   string `json:"detail"`
-}
-
-type VegasInfo struct {
-	Spread float64 `json:"spread"`
-	Total  float64 `json:"total"`
-	HomeML int     `json:"home_ml"`
-	AwayML int     `json:"away_ml"`
-}
-
-// PlaysSource serves one game's play-by-play.
 type PlaysSource interface {
 	GamePlays(ctx context.Context, gameID string) ([]nflverse.Play, error)
 }
@@ -112,92 +95,131 @@ func gamePlays(w http.ResponseWriter, r *http.Request, src PlaysSource) (gameID 
 	return gameID, season, plays, true
 }
 
-func SeasonsListHandler(w http.ResponseWriter, r *http.Request) {
-	currentYear := time.Now().Year()
-	if time.Now().Month() < 9 {
-		currentYear--
-	}
-
-	seasons := make([]int, 0, currentYear-1998)
-	for y := 1999; y <= currentYear; y++ {
-		seasons = append(seasons, y)
-	}
-
-	respond(w, seasons, false, currentYear, http.StatusOK)
-}
-
-func SeasonsWeeksHandler(w http.ResponseWriter, r *http.Request) {
-	yearStr := chi.URLParam(r, "year")
-	year, err := strconv.Atoi(yearStr)
-	if err != nil || year < 1999 {
-		respondError(w, "invalid season", http.StatusBadRequest)
-		return
-	}
-
-	// Regular season weeks (1-18) + playoffs
-	maxWeek := 18
-	if year >= 2021 {
-		maxWeek = 18
-	} else if year >= 1978 {
-		maxWeek = 16
-	}
-
-	weeks := make([]int, maxWeek)
-	for i := 1; i <= maxWeek; i++ {
-		weeks[i-1] = i
-	}
-
-	respond(w, weeks, false, year, http.StatusOK)
-}
-
-func SeasonsGamesHandler(espnClient espnClientInterface) http.HandlerFunc {
+func SeasonsListHandler(gs GameService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		yearStr := chi.URLParam(r, "year")
-		weekStr := chi.URLParam(r, "week")
+		seasons, err := gs.Seasons(r.Context())
+		if err != nil {
+			slog.Error("list seasons", "err", err)
+			respondError(w, "failed to fetch seasons", http.StatusServiceUnavailable)
+			return
+		}
+		latest := 0
+		if len(seasons) > 0 {
+			latest = seasons[len(seasons)-1]
+		}
+		respond(w, nonNil(seasons), false, latest, http.StatusOK)
+	}
+}
 
-		year, err := strconv.Atoi(yearStr)
+func SeasonsWeeksHandler(gs GameService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year, err := strconv.Atoi(chi.URLParam(r, "year"))
 		if err != nil || year < 1999 {
 			respondError(w, "invalid season", http.StatusBadRequest)
 			return
 		}
+		weeks, err := gs.Weeks(r.Context(), year)
+		if err != nil {
+			slog.Error("list weeks", "season", year, "err", err)
+			respondError(w, "failed to fetch weeks", http.StatusServiceUnavailable)
+			return
+		}
+		respond(w, nonNil(weeks), false, year, http.StatusOK)
+	}
+}
 
-		week, err := strconv.Atoi(weekStr)
+func SeasonsGamesHandler(gs GameService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		year, err := strconv.Atoi(chi.URLParam(r, "year"))
+		if err != nil || year < 1999 {
+			respondError(w, "invalid season", http.StatusBadRequest)
+			return
+		}
+		week, err := strconv.Atoi(chi.URLParam(r, "week"))
 		if err != nil || week < 1 {
 			respondError(w, "invalid week", http.StatusBadRequest)
 			return
 		}
 
-		games, err := espnClient.GetSchedule(r.Context(), year, week)
+		list, err := gs.Week(r.Context(), year, week)
+		if errors.Is(err, games.ErrNotFound) {
+			respondError(w, "week not found", http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			slog.Error("fetch schedule", "season", year, "week", week, "err", err)
 			respondError(w, "failed to fetch schedules", http.StatusServiceUnavailable)
 			return
 		}
-
-		respond(w, games, false, year, http.StatusOK)
+		respond(w, nonNil(list), false, year, http.StatusOK)
 	}
 }
 
-func GameDetailHandler(espnClient espnClientInterface) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		gameID := chi.URLParam(r, "gameID")
-		season, _, _ := parseGameID(gameID)
-
-		ctx := r.Context()
-		game, err := espnClient.GetGame(ctx, season, 0, gameID) // week=0 means search all weeks
-		if err != nil {
-			slog.Error("fetch game", "game_id", gameID, "err", err)
-			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
-			return
-		}
-
-		if game == nil {
-			respondError(w, "game not found", http.StatusNotFound)
-			return
-		}
-
-		respond(w, game, false, season, http.StatusOK)
+// loadGame validates the game ID and loads the game, writing the error response itself.
+func loadGame(w http.ResponseWriter, r *http.Request, gs GameService) (games.Game, bool) {
+	gameID := chi.URLParam(r, "gameID")
+	if _, _, ok := parseGameID(gameID); !ok {
+		respondError(w, "invalid game id", http.StatusBadRequest)
+		return games.Game{}, false
 	}
+	game, err := gs.Game(r.Context(), gameID)
+	if errors.Is(err, games.ErrNotFound) {
+		respondError(w, "game not found", http.StatusNotFound)
+		return games.Game{}, false
+	}
+	if err != nil {
+		slog.Error("fetch game", "game_id", gameID, "err", err)
+		respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
+		return games.Game{}, false
+	}
+	return game, true
+}
+
+func GameDetailHandler(gs GameService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if game, ok := loadGame(w, r, gs); ok {
+			respond(w, game, false, game.Season, http.StatusOK)
+		}
+	}
+}
+
+func GameNotesHandler(gs GameService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		game, ok := loadGame(w, r, gs)
+		if !ok {
+			return
+		}
+		respond(w, GameNotes{Stadium: game.Stadium, Roof: game.Roof, Surface: game.Surface, Indoor: game.Indoor}, false, game.Season, http.StatusOK)
+	}
+}
+
+func TeamGamesHandler(gs GameService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		teamAbbr := strings.ToUpper(chi.URLParam(r, "abbr"))
+
+		season := time.Now().Year()
+		if time.Now().Month() < 9 {
+			season--
+		}
+		if s, err := strconv.Atoi(r.URL.Query().Get("season")); err == nil {
+			season = s
+		}
+
+		list, err := gs.TeamGames(r.Context(), teamAbbr, season)
+		if err != nil {
+			slog.Error("fetch team schedule", "team", teamAbbr, "season", season, "err", err)
+			respondError(w, "failed to fetch team schedule", http.StatusServiceUnavailable)
+			return
+		}
+		respond(w, nonNil(list), false, season, http.StatusOK)
+	}
+}
+
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }
 
 func GameStatsHandler(src PlaysSource) http.HandlerFunc {
@@ -254,69 +276,5 @@ func GameDrivesHandler(src PlaysSource) http.HandlerFunc {
 		// Get home and away teams from the first play
 		quarters := aggregation.ComputeDrives(plays, plays[0].HomeTeam, plays[0].AwayTeam)
 		respond(w, DriveSummaryResponse{Quarters: quarters}, true, season, http.StatusOK)
-	}
-}
-
-func GameNotesHandler(espnClient espnClientInterface) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		gameID := chi.URLParam(r, "gameID")
-		season, _, _ := parseGameID(gameID)
-
-		ctx := r.Context()
-		game, err := espnClient.GetGame(ctx, season, 0, gameID)
-		if err != nil {
-			slog.Error("fetch game", "game_id", gameID, "err", err)
-			respondError(w, "failed to fetch game", http.StatusServiceUnavailable)
-			return
-		}
-
-		if game == nil {
-			respondError(w, "game not found", http.StatusNotFound)
-			return
-		}
-
-		notes := GameNotes{
-			Weather: &WeatherInfo{
-				Temperature: game.Temp,
-				Wind:        game.Wind,
-				Condition:   "Clear",
-				Stadium:     game.Stadium,
-				Roof:        game.Roof,
-			},
-			Injuries: []InjuryInfo{},
-			Vegas: &VegasInfo{
-				Spread: 0,
-				Total:  0,
-			},
-		}
-
-		respond(w, notes, false, season, http.StatusOK)
-	}
-}
-
-func TeamGamesHandler(espnClient espnClientInterface) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		teamAbbr := chi.URLParam(r, "abbr")
-		seasonStr := r.URL.Query().Get("season")
-
-		season := time.Now().Year()
-		if time.Now().Month() < 9 {
-			season--
-		}
-		if seasonStr != "" {
-			if s, err := strconv.Atoi(seasonStr); err == nil {
-				season = s
-			}
-		}
-
-		ctx := r.Context()
-		games, err := espnClient.GetTeamSchedule(ctx, teamAbbr, season)
-		if err != nil {
-			slog.Error("fetch team schedule", "team", teamAbbr, "season", season, "err", err)
-			respondError(w, "failed to fetch team schedule", http.StatusServiceUnavailable)
-			return
-		}
-
-		respond(w, games, false, season, http.StatusOK)
 	}
 }

@@ -13,6 +13,8 @@ import (
 
 	"quarta-para-dois/backend/internal/cache"
 	"quarta-para-dois/backend/internal/config"
+	"quarta-para-dois/backend/internal/espn"
+	"quarta-para-dois/backend/internal/games"
 	"quarta-para-dois/backend/internal/handlers"
 	"quarta-para-dois/backend/internal/middleware"
 	"quarta-para-dois/backend/internal/nflverse"
@@ -51,7 +53,8 @@ func main() {
 		PBPURLFormat: cfg.PBPURLFormat,
 		GamesCSVURL:  cfg.GamesCSVURL,
 	})
-	espnClient := nflverse.NewESPNClient(sharedCache)
+	espnClient := espn.NewClient(sharedCache, espn.Options{BaseURL: cfg.ESPNBaseURL})
+	gameService := games.NewService(nflClient, espnClient)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)
@@ -65,19 +68,19 @@ func main() {
 
 	r.Route("/api", func(r chi.Router) {
 		// Seasons
-		r.Get("/seasons", handlers.SeasonsListHandler)
-		r.Get("/seasons/{year}/weeks", handlers.SeasonsWeeksHandler)
-		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler(espnClient))
+		r.Get("/seasons", handlers.SeasonsListHandler(gameService))
+		r.Get("/seasons/{year}/weeks", handlers.SeasonsWeeksHandler(gameService))
+		r.Get("/seasons/{year}/weeks/{week}/games", handlers.SeasonsGamesHandler(gameService))
 
 		// Games - specific routes first (chi matches in order)
 		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(nflClient))
 		r.Get("/games/{gameID}/plays", handlers.GamePlaysHandler(nflClient))
 		r.Get("/games/{gameID}/drives", handlers.GameDrivesHandler(nflClient))
-		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(espnClient))
-		r.Get("/games/{gameID}", handlers.GameDetailHandler(espnClient))
+		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(gameService))
+		r.Get("/games/{gameID}", handlers.GameDetailHandler(gameService))
 
 		// Teams
-		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(espnClient))
+		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(gameService))
 	})
 
 	logger.Info("server starting", "port", cfg.Port)

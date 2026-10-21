@@ -32,6 +32,7 @@ const (
 
 type Event struct {
 	ID                 string
+	Week               int // ESPN's week number, 0 if absent
 	Kickoff            time.Time
 	Status             Status
 	HomeAbbr, AwayAbbr string // ESPN abbreviations as returned
@@ -165,9 +166,12 @@ func (c *Client) fetch(ctx context.Context, url string) ([]Event, error) {
 }
 
 type rawEvent struct {
-	ID           string    `json:"id"`
-	Date         string    `json:"date"`
-	Status       rawStatus `json:"status"`
+	ID     string    `json:"id"`
+	Date   string    `json:"date"`
+	Status rawStatus `json:"status"`
+	Week   struct {
+		Number int `json:"number"`
+	} `json:"week"`
 	Competitions []struct {
 		Status      *rawStatus `json:"status"`
 		Venue       rawVenue   `json:"venue"`
@@ -209,6 +213,7 @@ func (re rawEvent) toEvent() (Event, bool) {
 	}
 	e := Event{
 		ID:     re.ID,
+		Week:   re.Week.Number,
 		Status: StatusScheduled,
 		Venue:  comp.Venue.FullName,
 		City:   comp.Venue.Address.City,

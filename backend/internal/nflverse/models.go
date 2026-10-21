@@ -57,27 +57,3 @@ type Play struct {
 	TwoPointConvResult    string   `parquet:"two_point_conv_result"`
 	TDTeam                string   `parquet:"td_team"`
 }
-
-type Game struct {
-	GameID    string `parquet:"game_id"`
-	Season    int    `parquet:"season"`
-	Week      int    `parquet:"week"`
-	GameType  string `parquet:"game_type"`
-	GameDate  string `parquet:"gameday"`
-	Weekday   string `parquet:"weekday"`
-	GameTime  string `parquet:"gametime"`
-	HomeTeam  string `parquet:"home_team"`
-	AwayTeam  string `parquet:"away_team"`
-	HomeScore int    `parquet:"home_score"`
-	AwayScore int    `parquet:"away_score"`
-	Location  string `parquet:"location"`
-	Stadium   string `parquet:"stadium"`
-	Surface   string `parquet:"surface"`
-	Roof      string `parquet:"roof"`
-	Temp      int    `parquet:"temp"`
-	Wind      int    `parquet:"wind"`
-	HomeCoach string `parquet:"home_coach"`
-	AwayCoach string `parquet:"away_coach"`
-	Referee   string `parquet:"referee"`
-	StadiumId string `parquet:"stadium_id"`
-}

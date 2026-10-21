@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"quarta-para-dois/backend/internal/aggregation"
+	"quarta-para-dois/backend/internal/games"
 	"quarta-para-dois/backend/internal/nflverse"
 )
 
@@ -37,36 +38,38 @@ func (m *mockPlaysSource) GamePlays(ctx context.Context, gameID string) ([]nflve
 	return out, nil
 }
 
-type mockESPNClient struct {
-	schedule   []nflverse.Game
-	shouldFail bool
-	err        error
+type fakeGameService struct {
+	games []games.Game
+	err   error
 }
 
-func (m *mockESPNClient) GetSchedule(ctx context.Context, season, week int) ([]nflverse.Game, error) {
-	if m.shouldFail {
-		return nil, m.err
-	}
-	return m.schedule, nil
+func (f *fakeGameService) Seasons(context.Context) ([]int, error) { return []int{2023, 2024}, f.err }
+func (f *fakeGameService) Weeks(context.Context, int) ([]int, error) {
+	return []int{1, 2, 17, 18, 19}, f.err
 }
-
-func (m *mockESPNClient) GetGame(ctx context.Context, season, week int, gameID string) (*nflverse.Game, error) {
-	if m.shouldFail {
-		return nil, m.err
+func (f *fakeGameService) Week(context.Context, int, int) ([]games.Game, error) {
+	return f.games, f.err
+}
+func (f *fakeGameService) TeamGames(context.Context, string, int) ([]games.Game, error) {
+	return f.games, f.err
+}
+func (f *fakeGameService) Game(_ context.Context, id string) (games.Game, error) {
+	if f.err != nil {
+		return games.Game{}, f.err
 	}
-	for _, g := range m.schedule {
-		if g.GameID == gameID {
-			return &g, nil
+	for _, g := range f.games {
+		if g.GameID == id {
+			return g, nil
 		}
 	}
-	return nil, nil
+	return games.Game{}, games.ErrNotFound
 }
 
-func (m *mockESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, season int) ([]nflverse.Game, error) {
-	if m.shouldFail {
-		return nil, m.err
+func testGame() games.Game {
+	return games.Game{
+		GameID: "2024_01_DEN_LAC", Season: 2024, Week: 1, Status: "final",
+		HomeTeam: "LAC", AwayTeam: "DEN", Stadium: "SoFi Stadium", Roof: "dome", Surface: "turf", Indoor: true,
 	}
-	return m.schedule, nil
 }
 
 func setupTestRouter() *chi.Mux {
@@ -74,7 +77,7 @@ func setupTestRouter() *chi.Mux {
 		pbpData: []nflverse.Play{
 			{
 				PlayID:               1,
-				GameID:               "2024_01_LAC_DEN",
+				GameID:               "2024_01_DEN_LAC",
 				Quarter:              1,
 				Down:                 1,
 				YardsToGo:            10,
@@ -101,7 +104,7 @@ func setupTestRouter() *chi.Mux {
 			},
 			{
 				PlayID:               2,
-				GameID:               "2024_01_LAC_DEN",
+				GameID:               "2024_01_DEN_LAC",
 				Quarter:              1,
 				Down:                 1,
 				YardsToGo:            10,
@@ -129,30 +132,18 @@ func setupTestRouter() *chi.Mux {
 		},
 	}
 
-	espnClient := &mockESPNClient{
-		schedule: []nflverse.Game{
-			{
-				GameID:    "2024_01_LAC_DEN",
-				Season:    2024,
-				Week:      1,
-				HomeTeam:  "LAC",
-				AwayTeam:  "DEN",
-				HomeScore: 27,
-				AwayScore: 20,
-			},
-		},
-	}
+	gs := &fakeGameService{games: []games.Game{testGame()}}
 
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/seasons", SeasonsListHandler)
-		r.Get("/seasons/{year}/weeks", SeasonsWeeksHandler)
-		r.Get("/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler(espnClient))
-		r.Get("/games/{gameID}", GameDetailHandler(espnClient))
+		r.Get("/seasons", SeasonsListHandler(gs))
+		r.Get("/seasons/{year}/weeks", SeasonsWeeksHandler(gs))
+		r.Get("/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler(gs))
+		r.Get("/games/{gameID}", GameDetailHandler(gs))
 		r.Get("/games/{gameID}/stats", GameStatsHandler(client))
 		r.Get("/games/{gameID}/plays", GamePlaysHandler(client))
-		r.Get("/games/{gameID}/notes", GameNotesHandler(espnClient))
-		r.Get("/teams/{abbr}/games", TeamGamesHandler(espnClient))
+		r.Get("/games/{gameID}/notes", GameNotesHandler(gs))
+		r.Get("/teams/{abbr}/games", TeamGamesHandler(gs))
 	})
 	return r
 }
@@ -191,29 +182,29 @@ func TestSeasonsGamesHandler(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp APIResponse[[]nflverse.Game]
+	var resp APIResponse[[]games.Game]
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 	assert.Len(t, resp.Data, 1)
-	assert.Equal(t, "2024_01_LAC_DEN", resp.Data[0].GameID)
+	assert.Equal(t, "2024_01_DEN_LAC", resp.Data[0].GameID)
 }
 
 func TestGameDetailHandler(t *testing.T) {
 	router := setupTestRouter()
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp APIResponse[nflverse.Game]
+	var resp APIResponse[games.Game]
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
-	assert.Equal(t, "2024_01_LAC_DEN", resp.Data.GameID)
+	assert.Equal(t, "2024_01_DEN_LAC", resp.Data.GameID)
 }
 
 func TestGameStatsHandler(t *testing.T) {
 	router := setupTestRouter()
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/stats", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -228,7 +219,7 @@ func TestGameStatsHandler(t *testing.T) {
 
 func TestGamePlaysHandler(t *testing.T) {
 	router := setupTestRouter()
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN/plays", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/plays", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -242,14 +233,61 @@ func TestGamePlaysHandler(t *testing.T) {
 
 func TestGameNotesHandler(t *testing.T) {
 	router := setupTestRouter()
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN/notes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/notes", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp APIResponse[GameNotes]
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	assert.NotNil(t, resp.Data)
+	assert.Equal(t, GameNotes{Stadium: "SoFi Stadium", Roof: "dome", Surface: "turf", Indoor: true}, resp.Data)
+}
+
+func TestGameNotesHandler_NoPlaceholders(t *testing.T) {
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/notes", nil))
+
+	var raw struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	assert.NotContains(t, raw.Data, "vegas")
+	assert.NotContains(t, raw.Data, "condition")
+	assert.ElementsMatch(t, []string{"stadium", "roof", "surface", "indoor"}, keys(raw.Data))
+}
+
+func keys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func TestGameDetailHandler_NotFound(t *testing.T) {
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/games/2024_01_XXX_YYY", nil))
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestGameDetailHandler_InvalidID(t *testing.T) {
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/games/bad", nil))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestSeasonsGamesHandler_UpstreamError(t *testing.T) {
+	r := chi.NewRouter()
+	r.Get("/api/seasons/{year}/weeks/{week}/games", SeasonsGamesHandler(&fakeGameService{err: assert.AnError}))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/seasons/2024/weeks/1/games", nil))
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestTeamGamesHandler(t *testing.T) {
@@ -259,7 +297,7 @@ func TestTeamGamesHandler(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var resp APIResponse[[]nflverse.Game]
+	var resp APIResponse[[]games.Game]
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotNil(t, resp.Data)
 }
@@ -274,7 +312,7 @@ func TestGameStatsHandler_NotFound(t *testing.T) {
 		r.Get("/games/{gameID}/stats", GameStatsHandler(client))
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/stats", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -291,7 +329,7 @@ func TestGameStatsHandler_Error(t *testing.T) {
 		r.Get("/games/{gameID}/stats", GameStatsHandler(client))
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_LAC_DEN/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/stats", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

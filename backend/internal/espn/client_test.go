@@ -77,6 +77,7 @@ func TestScoreboard_ParsesWeek6(t *testing.T) {
 	assert.Equal(t, 13, *gb.AwayScore)
 	assert.Equal(t, StatusFinal, gb.Status)
 	assert.True(t, gb.Kickoff.Equal(time.Date(2026, 10, 19, 0, 20, 0, 0, time.UTC)), gb.Kickoff)
+	assert.Equal(t, 6, gb.Week)
 	assert.Equal(t, "Lambeau Field", gb.Venue)
 	assert.Equal(t, "Green Bay", gb.City)
 	assert.Equal(t, "WI", gb.State)
