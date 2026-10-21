@@ -1,4 +1,5 @@
-export type GameStatus = 'scheduled' | 'in_progress' | 'final';
+// '' when only games.csv is available and the game is past kickoff without a score.
+export type GameStatus = 'scheduled' | 'in_progress' | 'final' | '';
 
 export interface Game {
   game_id: string;

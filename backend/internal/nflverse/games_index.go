@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	_ "time/tzdata" // games.csv times are US Eastern; don't depend on the host's zone database
 )
 
 const gameIndexTTL = 24 * time.Hour
@@ -17,6 +18,33 @@ const gameIndexTTL = 24 * time.Hour
 type GameRef struct {
 	GameID, ESPNID, GameType, HomeTeam, AwayTeam, Roof, Surface, StadiumID, Stadium string
 	Season, Week                                                                    int
+	HomeScore, AwayScore                                                            *int      // nil until the game is played
+	Kickoff                                                                         time.Time // zero if unknown
+}
+
+// gamesCSVZone is the zone of games.csv's gameday/gametime columns.
+var gamesCSVZone = func() *time.Location {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		panic(err) // the embedded time/tzdata makes this unreachable
+	}
+	return loc
+}()
+
+func parseScore(s string) *int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return nil
+	}
+	return &n
+}
+
+func parseKickoff(day, clock string) time.Time {
+	t, err := time.ParseInLocation("2006-01-02 15:04", day+" "+clock, gamesCSVZone)
+	if err != nil {
+		return time.Time{}
+	}
+	return t.UTC()
 }
 
 type GameIndex struct {
@@ -75,6 +103,8 @@ func ParseGamesCSV(r io.Reader) (*GameIndex, error) {
 			Roof: get("roof"), Surface: get("surface"),
 			StadiumID: get("stadium_id"), Stadium: get("stadium"),
 			Season: season, Week: week,
+			HomeScore: parseScore(get("home_score")), AwayScore: parseScore(get("away_score")),
+			Kickoff: parseKickoff(get("gameday"), get("gametime")),
 		}
 		ix.byGameID[ref.GameID] = ref
 		if ref.ESPNID != "" {

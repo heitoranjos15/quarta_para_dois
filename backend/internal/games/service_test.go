@@ -2,6 +2,7 @@ package games
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,11 +29,15 @@ type fakeESPN struct {
 	t           *testing.T
 	scoreboards map[[3]int][]espn.Event
 	team        []espn.Event
+	err         error
 	calls       [][3]int
 }
 
 func (f *fakeESPN) Scoreboard(_ context.Context, season, seasonType, week int) ([]espn.Event, error) {
 	f.calls = append(f.calls, [3]int{season, seasonType, week})
+	if f.err != nil {
+		return nil, f.err
+	}
 	return f.scoreboards[[3]int{season, seasonType, week}], nil
 }
 
@@ -154,7 +159,7 @@ func TestService_Game(t *testing.T) {
 func TestService_Game_NotFound(t *testing.T) {
 	svc := NewService(sampleIndex(t), newFake(t))
 
-	_, err := svc.Game(context.Background(), "2026_06_NYG_NYJ")
+	_, err := svc.Game(context.Background(), "2026_06_NYG_BUF") // in neither games.csv nor ESPN
 
 	assert.ErrorIs(t, err, ErrNotFound)
 }
@@ -196,4 +201,56 @@ func TestService_Weeks_PerSeason(t *testing.T) {
 	none, err := svc.Weeks(context.Background(), 1990)
 	require.NoError(t, err)
 	assert.Empty(t, none)
+}
+
+func TestService_Game_NoESPNIDUsesIndex(t *testing.T) {
+	f := newFake(t)
+	svc := NewService(sampleIndex(t), f)
+
+	g, err := svc.Game(context.Background(), "2026_07_NYG_NYJ") // empty espn column
+
+	require.NoError(t, err)
+	assert.Empty(t, f.calls, "nothing to ask ESPN for")
+	assert.Equal(t, "NYJ", g.HomeTeam)
+	assert.Equal(t, "NYG", g.AwayTeam)
+	assert.Equal(t, "Lambeau Field", g.Stadium)
+	assert.Equal(t, "final", g.Status, "games.csv has its score")
+}
+
+func TestService_Game_ESPNDownUsesIndex(t *testing.T) {
+	f := newFake(t)
+	f.err = errors.New("espn unavailable")
+	svc := NewService(sampleIndex(t), f)
+
+	g, err := svc.Game(context.Background(), "2026_06_DAL_GB")
+
+	require.NoError(t, err)
+	assert.Equal(t, "final", g.Status)
+	require.NotNil(t, g.HomeScore)
+	assert.Equal(t, 23, *g.HomeScore)
+	assert.Equal(t, "grass", g.Surface)
+	assert.Equal(t, "2026-10-19T00:20:00Z", g.Kickoff)
+	assert.Equal(t, "401873007", g.ESPNID)
+}
+
+func TestService_Game_EventMissingFromScoreboardUsesIndex(t *testing.T) {
+	f := newFake(t)
+	f.scoreboards[[3]int{2026, 2, 6}] = nil
+	svc := NewService(sampleIndex(t), f)
+
+	g, err := svc.Game(context.Background(), "2026_06_DAL_GB")
+
+	require.NoError(t, err)
+	assert.Equal(t, "2026_06_DAL_GB", g.GameID)
+}
+
+func TestFromRef_StatusWithoutScores(t *testing.T) {
+	now := time.Date(2026, 10, 25, 17, 0, 0, 0, time.UTC)
+	ref := nflverse.GameRef{GameID: "2026_07_NE_CHI", Season: 2026, Week: 7}
+
+	ref.Kickoff = now.Add(time.Hour)
+	assert.Equal(t, "scheduled", fromRef(ref, now).Status)
+
+	ref.Kickoff = now.Add(-time.Hour)
+	assert.Equal(t, "", fromRef(ref, now).Status, "past kickoff with no score: we can't tell if it's live, so we don't say")
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -21,7 +22,7 @@ type Game struct {
 	Week      int    `json:"week"`
 	GameType  string `json:"game_type"`
 	Kickoff   string `json:"kickoff"` // RFC3339 UTC, "" if unknown
-	Status    string `json:"status"`  // scheduled | in_progress | final
+	Status    string `json:"status"`  // scheduled | in_progress | final, or "" if unknown
 	HomeTeam  string `json:"home_team"`
 	AwayTeam  string `json:"away_team"`
 	HomeScore *int   `json:"home_score"`
@@ -43,12 +44,13 @@ type ESPNSource interface {
 }
 
 type Service struct {
-	ix IndexSource
-	es ESPNSource
+	ix  IndexSource
+	es  ESPNSource
+	now func() time.Time
 }
 
 func NewService(ix IndexSource, es ESPNSource) *Service {
-	return &Service{ix: ix, es: es}
+	return &Service{ix: ix, es: es, now: time.Now}
 }
 
 func (s *Service) Seasons(ctx context.Context) ([]int, error) {
@@ -79,7 +81,9 @@ func (s *Service) Week(ctx context.Context, season, week int) ([]Game, error) {
 	return toGames(ix, events, season, week), nil
 }
 
-// Game finds one game with a single scoreboard request for its week.
+// Game finds one game with a single scoreboard request for its week. A game games.csv knows
+// is still returned from games.csv alone when ESPN can't provide it (no ESPN id, ESPN down,
+// or the event missing from the scoreboard).
 func (s *Service) Game(ctx context.Context, gameID string) (Game, error) {
 	ix, err := s.ix.GameIndex(ctx)
 	if err != nil {
@@ -88,18 +92,19 @@ func (s *Service) Game(ctx context.Context, gameID string) (Game, error) {
 
 	if ref, ok := ix.ByGameID(gameID); ok {
 		if ref.ESPNID == "" {
-			return Game{}, ErrNotFound
+			return fromRef(ref, s.now()), nil
 		}
 		events, err := s.weekEvents(ctx, ix, ref.Season, ref.Week)
 		if err != nil {
-			return Game{}, err
+			slog.Warn("ESPN scoreboard unavailable; using games.csv", "game_id", gameID, "err", err)
+			return fromRef(ref, s.now()), nil
 		}
 		for _, e := range events {
 			if e.ID == ref.ESPNID {
 				return toGame(ix, e, ref.Season, ref.Week), nil
 			}
 		}
-		return Game{}, ErrNotFound
+		return fromRef(ref, s.now()), nil
 	}
 
 	// Not in games.csv yet: it may still be a game ESPN lists under a fallback ID.
@@ -189,6 +194,36 @@ func toGame(ix *nflverse.GameIndex, e espn.Event, season, week int) Game {
 	}
 	g.HomeTeam, g.AwayTeam = normalizeAbbr(e.HomeAbbr), normalizeAbbr(e.AwayAbbr)
 	g.GameID = fmt.Sprintf("%d_%02d_%s_%s", g.Season, g.Week, g.AwayTeam, g.HomeTeam)
+	return g
+}
+
+// fromRef builds a Game from games.csv alone. games.csv has scores only once a game is over,
+// so a game past kickoff without scores gets no status rather than a guess.
+func fromRef(ref nflverse.GameRef, now time.Time) Game {
+	g := Game{
+		GameID:    ref.GameID,
+		ESPNID:    ref.ESPNID,
+		Season:    ref.Season,
+		Week:      ref.Week,
+		GameType:  ref.GameType,
+		HomeTeam:  ref.HomeTeam,
+		AwayTeam:  ref.AwayTeam,
+		HomeScore: ref.HomeScore,
+		AwayScore: ref.AwayScore,
+		Stadium:   ref.Stadium,
+		Indoor:    ref.Roof == "dome" || ref.Roof == "closed",
+		Roof:      ref.Roof,
+		Surface:   ref.Surface,
+	}
+	if !ref.Kickoff.IsZero() {
+		g.Kickoff = ref.Kickoff.Format(time.RFC3339)
+	}
+	switch {
+	case ref.HomeScore != nil && ref.AwayScore != nil:
+		g.Status = string(espn.StatusFinal)
+	case ref.Kickoff.After(now):
+		g.Status = string(espn.StatusScheduled)
+	}
 	return g
 }
 

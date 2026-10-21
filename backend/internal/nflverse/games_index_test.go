@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -107,4 +108,31 @@ func TestClient_GameIndexCachedInMemory(t *testing.T) {
 	_, err = c.GameIndex(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), requests.Load())
+}
+
+func TestParseGamesCSV_ScoresAndKickoff(t *testing.T) {
+	ix := loadSampleIndex(t)
+
+	ref, ok := ix.ByGameID("2026_06_DAL_GB")
+	require.True(t, ok)
+	require.NotNil(t, ref.HomeScore)
+	require.NotNil(t, ref.AwayScore)
+	assert.Equal(t, 23, *ref.HomeScore)
+	assert.Equal(t, 13, *ref.AwayScore)
+	// gameday/gametime are US Eastern: Sunday 20:20 EDT is 00:20 UTC on Monday
+	assert.True(t, ref.Kickoff.Equal(time.Date(2026, 10, 19, 0, 20, 0, 0, time.UTC)), ref.Kickoff)
+}
+
+func TestParseGamesCSV_UnplayedGameHasNoScores(t *testing.T) {
+	csv := "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score\n" +
+		"2026_08_NE_BUF,2026,REG,8,2026-11-01,13:00,NE,,BUF,\n"
+
+	ix, err := ParseGamesCSV(strings.NewReader(csv))
+	require.NoError(t, err)
+
+	ref, ok := ix.ByGameID("2026_08_NE_BUF")
+	require.True(t, ok)
+	assert.Nil(t, ref.HomeScore)
+	assert.Nil(t, ref.AwayScore)
+	assert.True(t, ref.Kickoff.Equal(time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC)), "EST after the clocks change: %s", ref.Kickoff)
 }
