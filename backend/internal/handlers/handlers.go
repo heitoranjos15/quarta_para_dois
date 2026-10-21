@@ -63,8 +63,6 @@ type VegasInfo struct {
 type nflverseClientInterface interface {
 	GetPBP(season int) ([]nflverse.Play, error)
 	GetSchedules(season int) ([]nflverse.Game, error)
-	GetTeams() ([]nflverse.Team, error)
-	GetRosters(season int) ([]nflverse.Roster, error)
 }
 
 func respond[T any](w http.ResponseWriter, data T, cached bool, season int, statusCode int) {

@@ -20,7 +20,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "pass",
 			Description:          "Herbert pass complete to Williams for 15 yards",
-			EPA:                  1.2,
+			EPA:                  f64(1.2),
 			Posteam:              "LAC",
 			Defteam:              "DEN",
 			Yardline100:          75,
@@ -51,7 +51,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "run",
 			Description:          "Ekeler rush for 5 yards",
-			EPA:                  0.3,
+			EPA:                  f64(0.3),
 			Posteam:              "LAC",
 			Defteam:              "DEN",
 			Yardline100:          60,
@@ -82,7 +82,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            5,
 			PlayType:             "pass",
 			Description:          "Herbert pass complete to Allen for 8 yards, 1st down",
-			EPA:                  0.8,
+			EPA:                  f64(0.8),
 			Posteam:              "LAC",
 			Defteam:              "DEN",
 			Yardline100:          55,
@@ -113,7 +113,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "pass",
 			Description:          "Herbert pass complete to Everett for 25 yards, TD",
-			EPA:                  4.2,
+			EPA:                  f64(4.2),
 			Posteam:              "LAC",
 			Defteam:              "DEN",
 			Yardline100:          25,
@@ -144,7 +144,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "pass",
 			Description:          "Wilson pass incomplete",
-			EPA:                  -0.5,
+			EPA:                  f64(-0.5),
 			Posteam:              "DEN",
 			Defteam:              "LAC",
 			Yardline100:          25,
@@ -175,7 +175,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "run",
 			Description:          "Williams rush for 12 yards",
-			EPA:                  1.5,
+			EPA:                  f64(1.5),
 			Posteam:              "DEN",
 			Defteam:              "LAC",
 			Yardline100:          25,
@@ -206,7 +206,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			YardsToGo:            10,
 			PlayType:             "pass",
 			Description:          "Wilson intercepted by James",
-			EPA:                  -3.0,
+			EPA:                  f64(-3.0),
 			Posteam:              "DEN",
 			Defteam:              "LAC",
 			Yardline100:          50,
@@ -331,3 +331,5 @@ func TestProcessPlays_SortedByPlayID(t *testing.T) {
 		assert.Less(t, q1.Plays[i-1].PlayID, q1.Plays[i].PlayID, "plays should be sorted by play_id")
 	}
 }
+
+func f64(v float64) *float64 { return &v }

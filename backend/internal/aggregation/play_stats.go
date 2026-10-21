@@ -100,7 +100,7 @@ func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 			Yardline:      p.Yardline100,
 			PlayType:      p.PlayType,
 			Description:   p.Description,
-			EPA:           p.EPA,
+			EPA:           epa(p),
 			Passer:        p.PasserPlayerName,
 			Receiver:      p.ReceiverPlayerName,
 			Rusher:        p.RusherPlayerName,

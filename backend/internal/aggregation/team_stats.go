@@ -94,26 +94,26 @@ func computeUnitStats(plays []nflverse.Play) TeamUnitStats {
 
 	for _, p := range plays {
 		// Total EPA
-		totalEPA += p.EPA
+		totalEPA += epa(p)
 
 		// Success rate (EPA > 0)
-		if p.EPA > 0 {
+		if epa(p) > 0 {
 			successPlays++
 		}
 
 		// Pass/Rush split
 		if p.PassAttempt == 1 {
 			passPlays++
-			passEPA += p.EPA
+			passEPA += epa(p)
 		}
 		if p.RushAttempt == 1 {
-			rushEPA += p.EPA
+			rushEPA += epa(p)
 		}
 
 		// Red zone (yardline100 <= 20)
 		if p.Yardline100 <= 20 && p.Yardline100 > 0 {
 			redZonePlays++
-			if p.EPA > 0 || p.Touchdown == 1 {
+			if epa(p) > 0 || p.Touchdown == 1 {
 				redZoneSuccess++
 			}
 		}
@@ -182,4 +182,12 @@ func computeUnitStats(plays []nflverse.Play) TeamUnitStats {
 	}
 
 	return stats
+}
+
+// epa is a temporary nil-safe accessor; Task 10 replaces it with explicit nil handling.
+func epa(p nflverse.Play) float64 {
+	if p.EPA == nil {
+		return 0
+	}
+	return *p.EPA
 }

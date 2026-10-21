@@ -42,35 +42,3 @@ func TestClient_GetSchedules(t *testing.T) {
 		return
 	}
 }
-
-func TestClient_GetTeams(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	c := cache.NewRedis("localhost:6379", "", false)
-	client := NewClient(c, "")
-
-	_, err := client.GetTeams()
-	// nflverse doesn't publish teams parquet yet (404)
-	if err != nil {
-		assert.Contains(t, err.Error(), "404")
-		return
-	}
-}
-
-func TestClient_GetRosters(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test")
-	}
-
-	c := cache.NewRedis("localhost:6379", "", false)
-	client := NewClient(c, "")
-
-	_, err := client.GetRosters(2024)
-	// nflverse doesn't publish rosters parquet yet (404)
-	if err != nil {
-		assert.Contains(t, err.Error(), "404")
-		return
-	}
-}

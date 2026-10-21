@@ -45,23 +45,6 @@ func (m *mockNFLVerseClient) GetSchedules(season int) ([]nflverse.Game, error) {
 	}, nil
 }
 
-func (m *mockNFLVerseClient) GetTeams() ([]nflverse.Team, error) {
-	if m.shouldFail {
-		return nil, m.err
-	}
-	return []nflverse.Team{
-		{TeamAbbr: "LAC", TeamName: "Los Angeles Chargers"},
-		{TeamAbbr: "DEN", TeamName: "Denver Broncos"},
-	}, nil
-}
-
-func (m *mockNFLVerseClient) GetRosters(season int) ([]nflverse.Roster, error) {
-	if m.shouldFail {
-		return nil, m.err
-	}
-	return []nflverse.Roster{}, nil
-}
-
 type mockESPNClient struct {
 	schedule   []nflverse.Game
 	shouldFail bool
@@ -105,7 +88,7 @@ func setupTestRouter() *chi.Mux {
 				YardsToGo:            10,
 				PlayType:             "pass",
 				Description:          "Herbert pass complete to Williams for 15 yards",
-				EPA:                  1.2,
+				EPA:                  f64(1.2),
 				Posteam:              "LAC",
 				Defteam:              "DEN",
 				Yardline100:          75,
@@ -132,7 +115,7 @@ func setupTestRouter() *chi.Mux {
 				YardsToGo:            10,
 				PlayType:             "run",
 				Description:          "Ekeler rush for 5 yards",
-				EPA:                  0.3,
+				EPA:                  f64(0.3),
 				Posteam:              "LAC",
 				Defteam:              "DEN",
 				Yardline100:          60,
@@ -324,3 +307,5 @@ func TestGameStatsHandler_Error(t *testing.T) {
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
+
+func f64(v float64) *float64 { return &v }

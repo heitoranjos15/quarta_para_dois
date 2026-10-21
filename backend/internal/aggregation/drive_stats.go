@@ -153,7 +153,7 @@ func computeDriveDetail(plays []nflverse.Play) DriveDetail {
 			Yardline:      p.Yardline100,
 			PlayType:      p.PlayType,
 			Description:   p.Description,
-			EPA:           p.EPA,
+			EPA:           epa(p),
 			Passer:        p.PasserPlayerName,
 			Receiver:      p.ReceiverPlayerName,
 			Rusher:        p.RusherPlayerName,
