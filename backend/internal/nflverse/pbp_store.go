@@ -64,6 +64,10 @@ func (c *Client) GamePlays(ctx context.Context, gameID string) ([]Play, error) {
 		return plays, nil
 	}
 
+	if c.recentlyMissing(season, gameID) {
+		return nil, ErrGameNotFound
+	}
+
 	result, err, _ := c.sfGroup.Do(fmt.Sprintf("pbp-season:%d", season), func() (any, error) {
 		// Shared by every waiter, so one caller giving up must not cancel it.
 		return c.downloadSeason(context.WithoutCancel(ctx), season)
@@ -80,17 +84,26 @@ func (c *Client) GamePlays(ctx context.Context, gameID string) ([]Play, error) {
 	return plays, nil
 }
 
-// downloadSeason fetches a season's play-by-play and stores every game in Redis.
-// A season fetched less than SeasonRefetch ago is not fetched again, so requests
-// for a game that isn't in the file can't trigger a download each time.
-func (c *Client) downloadSeason(ctx context.Context, season int) (map[string][]Play, error) {
-	c.mu.Lock()
-	last, fetched := c.seasonFetchedAt[season]
-	c.mu.Unlock()
-	if fetched && c.opts.Now().Sub(last) < c.opts.SeasonRefetch {
-		return nil, ErrGameNotFound
-	}
+// seasonState remembers the last download of a season.
+type seasonState struct {
+	fetchedAt time.Time
+	inFile    map[string]bool // games present in that file
+	stored    map[string]int  // games written to Redis, by play count
+}
 
+// recentlyMissing is true for a game that wasn't in a download made less than SeasonRefetch
+// ago, so requests for a game nflverse hasn't published can't each trigger a download.
+// A game that was in the file is never throttled: if it isn't cached, Redis lost it.
+func (c *Client) recentlyMissing(season int, gameID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	st, ok := c.seasons[season]
+	return ok && !st.inFile[gameID] && c.opts.Now().Sub(st.fetchedAt) < c.opts.SeasonRefetch
+}
+
+// downloadSeason fetches a season's play-by-play and writes to Redis the games that are
+// new or changed since the last write.
+func (c *Client) downloadSeason(ctx context.Context, season int) (map[string][]Play, error) {
 	data, err := c.download(ctx, fmt.Sprintf(c.opts.PBPURLFormat, season))
 	if err != nil {
 		return nil, err
@@ -104,14 +117,32 @@ func (c *Client) downloadSeason(ctx context.Context, season int) (map[string][]P
 	for _, p := range all {
 		byGame[p.GameID] = append(byGame[p.GameID], p)
 	}
-	for id, plays := range byGame {
-		if err := c.cache.Set(ctx, gamePlaysKey(id), plays, gamePlaysTTL); err != nil {
-			slog.Warn("cache set", "key", gamePlaysKey(id), "err", err)
-		}
-	}
 
 	c.mu.Lock()
-	c.seasonFetchedAt[season] = c.opts.Now()
+	st, ok := c.seasons[season]
+	if !ok {
+		st = &seasonState{stored: map[string]int{}}
+		c.seasons[season] = st
+	}
+	st.fetchedAt = c.opts.Now()
+	st.inFile = make(map[string]bool, len(byGame))
+	toWrite := map[string][]Play{}
+	for id, plays := range byGame {
+		st.inFile[id] = true
+		if st.stored[id] != len(plays) {
+			toWrite[id] = plays
+		}
+	}
 	c.mu.Unlock()
+
+	for id, plays := range toWrite {
+		if err := c.cache.Set(ctx, gamePlaysKey(id), plays, gamePlaysTTL); err != nil {
+			slog.Warn("cache set", "key", gamePlaysKey(id), "err", err)
+			continue
+		}
+		c.mu.Lock()
+		st.stored[id] = len(plays)
+		c.mu.Unlock()
+	}
 	return byGame, nil
 }

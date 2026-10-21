@@ -23,10 +23,10 @@ type Client struct {
 
 	games *lru.Cache[string, []Play]
 
-	mu              sync.Mutex
-	gameIndex       *GameIndex
-	gameIndexAt     time.Time
-	seasonFetchedAt map[int]time.Time
+	mu          sync.Mutex
+	gameIndex   *GameIndex
+	gameIndexAt time.Time
+	seasons     map[int]*seasonState
 }
 
 func NewClient(c cache.Cache, githubToken string, opts Options) *Client {
@@ -40,7 +40,7 @@ func NewClient(c cache.Cache, githubToken string, opts Options) *Client {
 		httpClient: &http.Client{
 			Timeout: 5 * time.Minute,
 		},
-		seasonFetchedAt: map[int]time.Time{},
+		seasons: map[int]*seasonState{},
 	}
 }
 

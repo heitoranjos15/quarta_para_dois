@@ -22,6 +22,7 @@ const (
 
 type pbpFixture struct {
 	srv       *httptest.Server
+	body      atomic.Pointer[[]byte] // the parquet file the server returns
 	downloads atomic.Int32
 	mr        *miniredis.Miniredis
 	addr      string // kept so a client can still be built after mr.Close()
@@ -38,9 +39,10 @@ func newPBPFixture(t *testing.T) *pbpFixture {
 
 	mr := miniredis.RunT(t)
 	f := &pbpFixture{mr: mr, addr: mr.Addr(), now: time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)}
+	f.body.Store(&data)
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.downloads.Add(1)
-		_, _ = w.Write(data)
+		_, _ = w.Write(*f.body.Load())
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -138,4 +140,58 @@ func TestGamePlays_MemoryBounded(t *testing.T) {
 	b, err := c.GamePlays(ctx, gameB)
 	require.NoError(t, err)
 	assert.Len(t, b, 1)
+}
+
+func TestGamePlays_RedisDownOtherGamesStillServed(t *testing.T) {
+	f := newPBPFixture(t)
+	f.mr.Close()
+	c := f.client(Options{SeasonRefetch: time.Hour})
+	ctx := context.Background()
+
+	_, err := c.GamePlays(ctx, gameA)
+	require.NoError(t, err)
+	b, err := c.GamePlays(ctx, gameB)
+
+	require.NoError(t, err, "a game that was in the file is not throttled just because Redis lost it")
+	assert.Len(t, b, 1)
+}
+
+func TestGamePlays_RefetchSkipsUnchangedGames(t *testing.T) {
+	f := newPBPFixture(t)
+	now := f.now
+	c := f.client(Options{SeasonRefetch: time.Hour, Now: func() time.Time { return now }})
+	ctx := context.Background()
+	_, err := c.GamePlays(ctx, gameA)
+	require.NoError(t, err)
+	f.mr.SetTTL(gamePlaysKey(gameA), time.Hour)
+
+	now = now.Add(2 * time.Hour)
+	_, err = c.GamePlays(ctx, "2026_06_NYG_NYJ")
+	require.ErrorIs(t, err, ErrGameNotFound)
+
+	require.Equal(t, int32(2), f.downloads.Load())
+	assert.Equal(t, time.Hour, f.mr.TTL(gamePlaysKey(gameA)), "game A did not change, so it was not written again")
+}
+
+func TestGamePlays_RefetchRewritesChangedGames(t *testing.T) {
+	f := newPBPFixture(t)
+	now := f.now
+	c := f.client(Options{SeasonRefetch: time.Hour, Now: func() time.Time { return now }})
+	ctx := context.Background()
+	_, err := c.GamePlays(ctx, gameA)
+	require.NoError(t, err)
+
+	grown := writePlaysParquet(t, []map[string]any{
+		{"game_id": gameA, "play_id": 1, "fixed_drive": 1},
+		{"game_id": gameA, "play_id": 2, "fixed_drive": 1},
+		{"game_id": gameB, "play_id": 1, "fixed_drive": 1},
+		{"game_id": gameB, "play_id": 2, "fixed_drive": 1},
+	})
+	f.body.Store(&grown)
+	now = now.Add(2 * time.Hour)
+	_, _ = c.GamePlays(ctx, "2026_06_NYG_NYJ")
+
+	b, err := f.client(Options{}).GamePlays(ctx, gameB) // fresh client: read from Redis
+	require.NoError(t, err)
+	assert.Len(t, b, 2)
 }
