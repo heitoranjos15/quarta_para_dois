@@ -37,6 +37,8 @@ type Client struct {
 	games *lru.Cache[string, []Play]
 
 	mu              sync.Mutex
+	gameIndex       *GameIndex
+	gameIndexAt     time.Time
 	seasonFetchedAt map[int]time.Time
 }
 
