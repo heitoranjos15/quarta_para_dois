@@ -16,7 +16,7 @@ const (
 	DriveEndInterception DriveEndReason = "INTERCEPTION"
 	DriveEndFumbleLost   DriveEndReason = "FUMBLE_LOST"
 	DriveEndFieldGoal    DriveEndReason = "FIELD_GOAL"
-	DriveEndExtraPoint   DriveEndReason = "EXTRA_POINT"
+	DriveEndMissedFG     DriveEndReason = "MISSED_FIELD_GOAL"
 	DriveEndTouchdown    DriveEndReason = "TOUCHDOWN"
 	DriveEndSafety       DriveEndReason = "SAFETY"
 	DriveEndEndOfHalf    DriveEndReason = "END_OF_HALF"
@@ -33,6 +33,7 @@ type DriveDetail struct {
 	Yards              int          `json:"yards"`
 	TimeOfPossession   string       `json:"time_of_possession"`
 	Result             string       `json:"result"`
+	Points             int          `json:"points"` // scored by the offense
 	EndPlayDescription string       `json:"end_play_description"`
 	EndPlayType        string       `json:"end_play_type"`
 	Plays              []PlayDetail `json:"plays"`
@@ -52,78 +53,58 @@ type QuarterDriveSummary struct {
 
 type DriveSummaryResponse struct {
 	Quarters map[int]QuarterDriveSummary `json:"quarters"`
-	Overtime *QuarterDriveSummary        `json:"overtime,omitempty"`
 }
 
+// ComputeDrives groups a game's plays by nflverse's fixed_drive. A drive is listed under the
+// quarter it started in (overtime is quarter 5) and counted once in that quarter's totals.
 func ComputeDrives(plays []nflverse.Play, homeTeam, awayTeam string) map[int]QuarterDriveSummary {
-	if len(plays) == 0 {
-		return make(map[int]QuarterDriveSummary)
-	}
-
-	sortedPlays := make([]nflverse.Play, len(plays))
-	copy(sortedPlays, plays)
-	sort.Slice(sortedPlays, func(i, j int) bool {
-		return sortedPlays[i].PlayID < sortedPlays[j].PlayID
-	})
-
-	quarterMap := make(map[int][]nflverse.Play)
-	for _, p := range sortedPlays {
-		quarterMap[p.Quarter] = append(quarterMap[p.Quarter], p)
-	}
-
-	var quarters []int
-	for q := range quarterMap {
-		quarters = append(quarters, q)
-	}
-	sort.Ints(quarters)
-
-	result := make(map[int]QuarterDriveSummary)
-	for _, q := range quarters {
-		qPlays := quarterMap[q]
-		result[q] = processQuarterDrives(q, qPlays, homeTeam, awayTeam)
-	}
-
-	return result
-}
-
-func processQuarterDrives(quarter int, plays []nflverse.Play, homeTeam, awayTeam string) QuarterDriveSummary {
-	driveMap := make(map[int][]nflverse.Play)
+	byDrive := make(map[int][]nflverse.Play)
 	for _, p := range plays {
-		if p.Drive > 0 {
-			driveMap[p.Drive] = append(driveMap[p.Drive], p)
+		if p.FixedDrive > 0 {
+			byDrive[p.FixedDrive] = append(byDrive[p.FixedDrive], p)
 		}
 	}
 
-	var driveDetails []DriveDetail
-	for _, drivePlays := range driveMap {
+	byQuarter := make(map[int][]DriveDetail)
+	for _, drivePlays := range byDrive {
+		sort.Slice(drivePlays, func(i, j int) bool { return drivePlays[i].PlayID < drivePlays[j].PlayID })
 		detail := computeDriveDetail(drivePlays)
-		driveDetails = append(driveDetails, detail)
+		quarter := driveStartQuarter(drivePlays)
+		byQuarter[quarter] = append(byQuarter[quarter], detail)
 	}
 
-	sort.Slice(driveDetails, func(i, j int) bool {
-		return driveDetails[i].DriveID < driveDetails[j].DriveID
-	})
+	result := make(map[int]QuarterDriveSummary, len(byQuarter))
+	for quarter, details := range byQuarter {
+		sort.Slice(details, func(i, j int) bool { return details[i].DriveID < details[j].DriveID })
+		result[quarter] = summarizeQuarter(details, homeTeam, awayTeam)
+	}
+	return result
+}
 
+func driveStartQuarter(plays []nflverse.Play) int {
+	for _, p := range plays {
+		if p.DriveQuarterStart > 0 {
+			return p.DriveQuarterStart
+		}
+	}
+	return plays[0].Quarter
+}
+
+func summarizeQuarter(details []DriveDetail, homeTeam, awayTeam string) QuarterDriveSummary {
 	homeTotal := TeamDriveTotal{}
 	awayTotal := TeamDriveTotal{}
 
-	for _, dd := range driveDetails {
+	for _, dd := range details {
 		switch dd.Team {
 		case homeTeam:
-			homeTotal.Drives++
-			homeTotal.Yards += dd.Yards
-			homeTotal.Points += drivePoints(dd.Result)
-			homeTotal.TimeOfPossession = addTimeOfPossession(homeTotal.TimeOfPossession, dd.TimeOfPossession)
+			addDrive(&homeTotal, dd)
 		case awayTeam:
-			awayTotal.Drives++
-			awayTotal.Yards += dd.Yards
-			awayTotal.Points += drivePoints(dd.Result)
-			awayTotal.TimeOfPossession = addTimeOfPossession(awayTotal.TimeOfPossession, dd.TimeOfPossession)
+			addDrive(&awayTotal, dd)
 		}
 	}
 
 	return QuarterDriveSummary{
-		Drives: driveDetails,
+		Drives: details,
 		Total: map[string]TeamDriveTotal{
 			"home": homeTotal,
 			"away": awayTotal,
@@ -131,21 +112,27 @@ func processQuarterDrives(quarter int, plays []nflverse.Play, homeTeam, awayTeam
 	}
 }
 
+func addDrive(total *TeamDriveTotal, dd DriveDetail) {
+	total.Drives++
+	total.Yards += dd.Yards
+	total.Points += dd.Points
+	total.TimeOfPossession = addTimeOfPossession(total.TimeOfPossession, dd.TimeOfPossession)
+}
+
+// computeDriveDetail describes one drive. plays must be sorted by play id.
 func computeDriveDetail(plays []nflverse.Play) DriveDetail {
 	if len(plays) == 0 {
 		return DriveDetail{}
 	}
 
-	sort.Slice(plays, func(i, j int) bool {
-		return plays[i].PlayID < plays[j].PlayID
-	})
-
 	firstPlay := plays[0]
 	lastPlay := plays[len(plays)-1]
 
 	var playDetails []PlayDetail
+	totalYards := 0
 	for _, p := range plays {
-		detail := PlayDetail{
+		totalYards += p.YardsGained
+		playDetails = append(playDetails, PlayDetail{
 			PlayID:        p.PlayID,
 			Quarter:       p.Quarter,
 			Down:          p.Down,
@@ -159,99 +146,99 @@ func computeDriveDetail(plays []nflverse.Play) DriveDetail {
 			Rusher:        p.RusherPlayerName,
 			Tackler:       p.TacklerPlayerName,
 			IsScoringPlay: p.Touchdown == 1,
-			DriveID:       p.Drive,
-		}
-		playDetails = append(playDetails, detail)
+			DriveID:       p.FixedDrive,
+		})
 	}
 
-	var firstSec, lastSec int
-	for _, p := range plays {
-		if firstSec == 0 || p.GameSecondsRemaining > firstSec {
-			firstSec = p.GameSecondsRemaining
-		}
-		if lastSec == 0 || p.GameSecondsRemaining < lastSec {
-			lastSec = p.GameSecondsRemaining
-		}
-	}
-
-	top := ""
-	if firstSec > lastSec {
-		diff := firstSec - lastSec
-		top = formatDuration(diff)
-	}
-
-	totalYards := 0
-	for _, p := range plays {
-		totalYards += p.YardsGained
-	}
-
-	endReason := determineEndReason(lastPlay, plays)
+	result := driveResult(firstNonEmpty(plays, func(p nflverse.Play) string { return p.FixedDriveResult }), plays)
 
 	return DriveDetail{
-		DriveID:            plays[0].Drive,
-		Team:               plays[0].Posteam,
+		DriveID:            firstPlay.FixedDrive,
+		Team:               firstNonEmpty(plays, func(p nflverse.Play) string { return p.Posteam }),
 		StartYardline:      firstPlay.Yardline100,
 		EndYardline:        lastPlay.Yardline100,
 		PlaysCount:         len(plays),
 		Yards:              totalYards,
-		TimeOfPossession:   top,
-		Result:             string(endReason),
+		TimeOfPossession:   firstNonEmpty(plays, func(p nflverse.Play) string { return p.DriveTimeOfPossession }),
+		Result:             string(result),
+		Points:             drivePoints(result, plays),
 		EndPlayDescription: lastPlay.Description,
 		EndPlayType:        lastPlay.PlayType,
 		Plays:              playDetails,
 	}
 }
 
-func determineEndReason(lastPlay nflverse.Play, allPlays []nflverse.Play) DriveEndReason {
-	if lastPlay.Touchdown == 1 {
+func firstNonEmpty(plays []nflverse.Play, get func(nflverse.Play) string) string {
+	for _, p := range plays {
+		if v := get(p); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// driveResult maps nflverse's fixed_drive_result to a DriveEndReason. plays must be the
+// drive's plays in order; they decide what a generic "Turnover" was.
+func driveResult(fixedDriveResult string, plays []nflverse.Play) DriveEndReason {
+	switch fixedDriveResult {
+	case "Touchdown":
 		return DriveEndTouchdown
-	}
-	if lastPlay.Interception == 1 {
-		return DriveEndInterception
-	}
-	if lastPlay.FumbleLost == 1 {
-		return DriveEndFumbleLost
-	}
-	if lastPlay.Down == 4 && lastPlay.FourthDownConverted == 0 {
-		return DriveEndDowns
-	}
-	if lastPlay.PlayType == "punt" {
-		return DriveEndPunt
-	}
-	if lastPlay.PlayType == "field_goal" {
+	case "Field goal":
 		return DriveEndFieldGoal
-	}
-	if lastPlay.PlayType == "extra_point" {
-		return DriveEndExtraPoint
-	}
-	if lastPlay.Sack == 1 && lastPlay.Yardline100 <= 1 && lastPlay.YardsGained < 0 {
+	case "Missed field goal":
+		return DriveEndMissedFG
+	case "Punt":
+		return DriveEndPunt
+	case "Turnover on downs":
+		return DriveEndDowns
+	case "Safety":
 		return DriveEndSafety
-	}
-	if lastPlay.GameSecondsRemaining <= 0 || (lastPlay.Quarter == 4 && lastPlay.GameSecondsRemaining < 120) {
-		return DriveEndEndOfGame
-	}
-	if lastPlay.Quarter == 2 && lastPlay.GameSecondsRemaining < 120 {
+	case "Turnover", "Opp touchdown":
+		return turnoverKind(plays)
+	case "End of half":
+		if len(plays) > 0 && plays[len(plays)-1].DriveQuarterEnd >= 4 {
+			return DriveEndEndOfGame
+		}
 		return DriveEndEndOfHalf
-	}
-	if lastPlay.Quarter == 4 && lastPlay.GameSecondsRemaining > 0 {
-		return DriveEndEndOfGame
 	}
 	return DriveEndOther
 }
 
-func drivePoints(result string) int {
-	switch result {
-	case "TOUCHDOWN":
-		return 7
-	case "FIELD_GOAL":
-		return 3
-	case "SAFETY":
-		return 2
-	case "EXTRA_POINT":
-		return 1
-	default:
-		return 0
+func turnoverKind(plays []nflverse.Play) DriveEndReason {
+	for _, p := range plays {
+		if p.Interception == 1 {
+			return DriveEndInterception
+		}
 	}
+	for _, p := range plays {
+		if p.FumbleLost == 1 {
+			return DriveEndFumbleLost
+		}
+	}
+	if len(plays) > 0 && plays[len(plays)-1].PlayType == "punt" {
+		return DriveEndPunt
+	}
+	return DriveEndOther
+}
+
+// drivePoints is what the offense scored on the drive. A defensive touchdown scores nothing for it.
+func drivePoints(result DriveEndReason, plays []nflverse.Play) int {
+	switch result {
+	case DriveEndTouchdown:
+		points := 6
+		for _, p := range plays {
+			if p.ExtraPointResult == "good" {
+				points++
+			}
+			if p.TwoPointConvResult == "success" {
+				points += 2
+			}
+		}
+		return points
+	case DriveEndFieldGoal:
+		return 3
+	}
+	return 0
 }
 
 func formatDuration(seconds int) string {

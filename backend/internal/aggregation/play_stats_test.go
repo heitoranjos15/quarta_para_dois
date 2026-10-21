@@ -11,7 +11,7 @@ import (
 )
 
 func loadPlayStatsTestPlays() []nflverse.Play {
-	return []nflverse.Play{
+	return withFixedDrives([]nflverse.Play{
 		{
 			PlayID:               1,
 			GameID:               "2024_01_LAC_DEN",
@@ -229,7 +229,7 @@ func loadPlayStatsTestPlays() []nflverse.Play {
 			HomeTeam:             "LAC",
 			AwayTeam:             "DEN",
 		},
-	}
+	})
 }
 
 func TestProcessPlays(t *testing.T) {
@@ -304,9 +304,9 @@ func TestProcessPlays_DriveGrouping(t *testing.T) {
 
 	drive := q1.Drives[0]
 	assert.Equal(t, 1, drive.DriveID)
-	assert.Equal(t, 4, drive.PlayCount)    // 4 plays in drive 1
-	assert.Equal(t, 53, drive.Yards)       // 15+5+8+25
-	assert.Contains(t, drive.Result, "TD") // Ended in TD
+	assert.Equal(t, 4, drive.PlayCount) // 4 plays in drive 1
+	assert.Equal(t, 53, drive.Yards)    // 15+5+8+25
+	assert.Equal(t, "TOUCHDOWN", drive.Result)
 	assert.Greater(t, drive.TOP, time.Duration(0))
 }
 
@@ -333,3 +333,16 @@ func TestProcessPlays_SortedByPlayID(t *testing.T) {
 }
 
 func f64(v float64) *float64 { return &v }
+
+func TestProcessPlays_UsesSameDriveResult(t *testing.T) {
+	plays := onePlayDrive("Punt",
+		nflverse.Play{PlayType: "pass", Down: 3},
+		nflverse.Play{PlayType: "punt", Down: 4},
+	)
+
+	quarters := ProcessPlays(plays)
+
+	require.Len(t, quarters, 1)
+	require.Len(t, quarters[0].Drives, 1)
+	assert.Equal(t, "PUNT", quarters[0].Drives[0].Result)
+}

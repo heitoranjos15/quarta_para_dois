@@ -261,11 +261,6 @@ func filterPlays(plays []nflverse.Play, keep func(nflverse.Play) bool) []nflvers
 	return out
 }
 
-type DriveSummaryResponse struct {
-	Quarters map[int]aggregation.QuarterDriveSummary `json:"quarters"`
-	Overtime *aggregation.QuarterDriveSummary        `json:"overtime,omitempty"`
-}
-
 func GameDrivesHandler(src PlaysSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, season, plays, ok := gamePlays(w, r, src)
@@ -275,6 +270,6 @@ func GameDrivesHandler(src PlaysSource) http.HandlerFunc {
 
 		// Get home and away teams from the first play
 		quarters := aggregation.ComputeDrives(plays, plays[0].HomeTeam, plays[0].AwayTeam)
-		respond(w, DriveSummaryResponse{Quarters: quarters}, true, season, http.StatusOK)
+		respond(w, aggregation.DriveSummaryResponse{Quarters: quarters}, true, season, http.StatusOK)
 	}
 }

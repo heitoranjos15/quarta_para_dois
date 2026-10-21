@@ -85,8 +85,8 @@ func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 	// Group plays by drive
 	driveMap := make(map[int][]nflverse.Play)
 	for _, p := range plays {
-		if p.Drive > 0 {
-			driveMap[p.Drive] = append(driveMap[p.Drive], p)
+		if p.FixedDrive > 0 {
+			driveMap[p.FixedDrive] = append(driveMap[p.FixedDrive], p)
 		}
 	}
 
@@ -106,7 +106,7 @@ func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 			Rusher:        p.RusherPlayerName,
 			Tackler:       p.TacklerPlayerName,
 			IsScoringPlay: p.Touchdown == 1,
-			DriveID:       p.Drive,
+			DriveID:       p.FixedDrive,
 		}
 		playDetails = append(playDetails, detail)
 	}
@@ -154,7 +154,7 @@ func computeDriveSummary(plays []nflverse.Play) DriveSummary {
 	})
 
 	drive := DriveSummary{
-		DriveID:       plays[0].Drive,
+		DriveID:       plays[0].FixedDrive,
 		PlayCount:     len(plays),
 		StartYardline: plays[0].Yardline100,
 		EndYardline:   plays[len(plays)-1].Yardline100,
@@ -166,30 +166,7 @@ func computeDriveSummary(plays []nflverse.Play) DriveSummary {
 	}
 
 	// Determine result
-	lastPlay := plays[len(plays)-1]
-	if lastPlay.Touchdown == 1 {
-		drive.Result = "TD"
-	} else if lastPlay.Interception == 1 {
-		drive.Result = "INT"
-	} else if lastPlay.FumbleLost == 1 {
-		drive.Result = "FUM"
-	} else if lastPlay.Down == 4 && lastPlay.FourthDownConverted == 0 {
-		drive.Result = "DOWNS"
-	} else if lastPlay.PlayType == "punt" {
-		drive.Result = "PUNT"
-	} else if lastPlay.PlayType == "field_goal" {
-		if lastPlay.YardsGained > 0 { // assuming positive = good
-			drive.Result = "FG"
-		} else {
-			drive.Result = "FG MISS"
-		}
-	} else if lastPlay.GameSecondsRemaining <= 0 || (lastPlay.Quarter == 4 && lastPlay.GameSecondsRemaining < 120) {
-		drive.Result = "END GAME"
-	} else if lastPlay.Quarter == 2 && lastPlay.GameSecondsRemaining < 120 {
-		drive.Result = "END HALF"
-	} else {
-		drive.Result = "OTHER"
-	}
+	drive.Result = string(driveResult(firstNonEmpty(plays, func(p nflverse.Play) string { return p.FixedDriveResult }), plays))
 
 	// Calculate TOP
 	var firstSec, lastSec int

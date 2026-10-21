@@ -10,7 +10,7 @@ import (
 )
 
 func loadDriveTestPlays() []nflverse.Play {
-	return []nflverse.Play{
+	return withFixedDrives([]nflverse.Play{
 		{
 			PlayID:               1,
 			GameID:               "2024_01_LAC_DEN",
@@ -259,7 +259,7 @@ func loadDriveTestPlays() []nflverse.Play {
 			HomeTeam:             "LAC",
 			AwayTeam:             "DEN",
 		},
-	}
+	})
 }
 
 func TestComputeDrives(t *testing.T) {
@@ -284,7 +284,7 @@ func TestComputeDrives(t *testing.T) {
 	assert.Len(t, drive1.Plays, 4)
 
 	assert.Equal(t, 1, q1.Total["home"].Drives)
-	assert.Equal(t, 7, q1.Total["home"].Points)
+	assert.Equal(t, 6, q1.Total["home"].Points) // the fixture has no extra-point play
 	assert.Equal(t, 53, q1.Total["home"].Yards)
 
 	q2 := quarters[2]
@@ -357,89 +357,6 @@ func TestComputeDrives_ScoringPlay(t *testing.T) {
 	assert.Equal(t, 4.2, tdPlay.EPA)
 }
 
-func TestDetermineEndReason_Touchdown(t *testing.T) {
-	lastPlay := nflverse.Play{
-		Touchdown: 1,
-		PlayType:  "pass",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndTouchdown, reason)
-}
-
-func TestDetermineEndReason_Interception(t *testing.T) {
-	lastPlay := nflverse.Play{
-		Interception: 1,
-		PlayType:     "pass",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndInterception, reason)
-}
-
-func TestDetermineEndReason_FumbleLost(t *testing.T) {
-	lastPlay := nflverse.Play{
-		FumbleLost: 1,
-		PlayType:   "run",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndFumbleLost, reason)
-}
-
-func TestDetermineEndReason_Downs(t *testing.T) {
-	lastPlay := nflverse.Play{
-		Down:                4,
-		FourthDownConverted: 0,
-		PlayType:            "pass",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndDowns, reason)
-}
-
-func TestDetermineEndReason_Punt(t *testing.T) {
-	lastPlay := nflverse.Play{
-		PlayType: "punt",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndPunt, reason)
-}
-
-func TestDetermineEndReason_FieldGoal(t *testing.T) {
-	lastPlay := nflverse.Play{
-		PlayType: "field_goal",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndFieldGoal, reason)
-}
-
-func TestDetermineEndReason_EndOfHalf(t *testing.T) {
-	lastPlay := nflverse.Play{
-		Quarter:              2,
-		GameSecondsRemaining: 30,
-		PlayType:             "qb_kneel",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndEndOfHalf, reason)
-}
-
-func TestDetermineEndReason_EndOfGame(t *testing.T) {
-	lastPlay := nflverse.Play{
-		Quarter:              4,
-		GameSecondsRemaining: 10,
-		PlayType:             "qb_kneel",
-	}
-	reason := determineEndReason(lastPlay, []nflverse.Play{})
-	assert.Equal(t, DriveEndEndOfGame, reason)
-}
-
-func TestDrivePoints(t *testing.T) {
-	assert.Equal(t, 7, drivePoints("TOUCHDOWN"))
-	assert.Equal(t, 3, drivePoints("FIELD_GOAL"))
-	assert.Equal(t, 2, drivePoints("SAFETY"))
-	assert.Equal(t, 1, drivePoints("EXTRA_POINT"))
-	assert.Equal(t, 0, drivePoints("PUNT"))
-	assert.Equal(t, 0, drivePoints("INTERCEPTION"))
-	assert.Equal(t, 0, drivePoints("OTHER"))
-}
-
 func TestFormatDuration(t *testing.T) {
 	assert.Equal(t, "0:00", formatDuration(0))
 	assert.Equal(t, "0:00", formatDuration(-5))
@@ -455,4 +372,158 @@ func TestAddTimeOfPossession(t *testing.T) {
 	assert.Equal(t, "2:45", addTimeOfPossession("1:30", "1:15"))
 	assert.Equal(t, "0:45", addTimeOfPossession("", "0:45"))
 	assert.Equal(t, "1:00", addTimeOfPossession("1:00", ""))
+}
+
+// withFixedDrives fills the nflverse drive columns the way the real file does: fixed_drive
+// mirrors drive, and every play of a drive carries the drive's result and starting quarter.
+func withFixedDrives(plays []nflverse.Play) []nflverse.Play {
+	results := map[int]string{1: "Touchdown", 2: "Turnover", 3: "Punt"}
+	for i := range plays {
+		plays[i].FixedDrive = plays[i].Drive
+		plays[i].FixedDriveResult = results[plays[i].Drive]
+		plays[i].DriveQuarterStart = plays[i].Quarter
+		plays[i].DriveQuarterEnd = plays[i].Quarter
+	}
+	return plays
+}
+
+func onePlayDrive(result string, plays ...nflverse.Play) []nflverse.Play {
+	for i := range plays {
+		plays[i].GameID = "2026_06_DAL_GB"
+		plays[i].PlayID = i + 1
+		plays[i].FixedDrive = 1
+		plays[i].FixedDriveResult = result
+		plays[i].Posteam = "GB"
+		if plays[i].Quarter == 0 {
+			plays[i].Quarter = 1
+		}
+		if plays[i].DriveQuarterStart == 0 {
+			plays[i].DriveQuarterStart = plays[i].Quarter
+		}
+		if plays[i].DriveQuarterEnd == 0 {
+			plays[i].DriveQuarterEnd = plays[i].Quarter
+		}
+	}
+	return plays
+}
+
+func onlyDrive(t *testing.T, plays []nflverse.Play) (DriveDetail, QuarterDriveSummary) {
+	t.Helper()
+	quarters := ComputeDrives(plays, "GB", "DAL")
+	for _, q := range quarters {
+		if len(q.Drives) == 1 {
+			return q.Drives[0], q
+		}
+	}
+	t.Fatalf("expected exactly one drive, got %+v", quarters)
+	return DriveDetail{}, QuarterDriveSummary{}
+}
+
+func TestComputeDrives_FourthDownPuntIsPunt(t *testing.T) {
+	plays := onePlayDrive("Punt",
+		nflverse.Play{PlayType: "pass", Down: 3},
+		nflverse.Play{PlayType: "punt", Down: 4},
+	)
+
+	drive, q := onlyDrive(t, plays)
+
+	assert.Equal(t, "PUNT", drive.Result)
+	assert.Equal(t, 0, drive.Points)
+	assert.Equal(t, 0, q.Total["home"].Points)
+}
+
+func TestComputeDrives_FieldGoalMadeAndMissed(t *testing.T) {
+	made, q := onlyDrive(t, onePlayDrive("Field goal",
+		nflverse.Play{PlayType: "run", Down: 1},
+		nflverse.Play{PlayType: "field_goal", Down: 4, FieldGoalResult: "made"},
+	))
+	assert.Equal(t, "FIELD_GOAL", made.Result)
+	assert.Equal(t, 3, made.Points)
+	assert.Equal(t, 3, q.Total["home"].Points)
+
+	missed, _ := onlyDrive(t, onePlayDrive("Missed field goal",
+		nflverse.Play{PlayType: "field_goal", Down: 4, FieldGoalResult: "missed"},
+	))
+	assert.Equal(t, "MISSED_FIELD_GOAL", missed.Result)
+	assert.Equal(t, 0, missed.Points)
+}
+
+func TestComputeDrives_PickSix(t *testing.T) {
+	drive, q := onlyDrive(t, onePlayDrive("Opp touchdown",
+		nflverse.Play{PlayType: "pass", Down: 2},
+		nflverse.Play{PlayType: "pass", Down: 3, Interception: 1, Touchdown: 1, TDTeam: "DAL"},
+	))
+
+	assert.Equal(t, "INTERCEPTION", drive.Result)
+	assert.Equal(t, 0, drive.Points, "the defense scored, not the offense")
+	assert.Equal(t, 0, q.Total["home"].Points)
+}
+
+func TestComputeDrives_TouchdownPoints(t *testing.T) {
+	td := nflverse.Play{PlayType: "pass", Down: 2, Touchdown: 1}
+	cases := []struct {
+		name  string
+		extra nflverse.Play
+		want  int
+	}{
+		{"extra point good", nflverse.Play{PlayType: "extra_point", ExtraPointResult: "good"}, 7},
+		{"two point success", nflverse.Play{PlayType: "run", TwoPointConvResult: "success"}, 8},
+		{"extra point failed", nflverse.Play{PlayType: "extra_point", ExtraPointResult: "failed"}, 6},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			drive, _ := onlyDrive(t, onePlayDrive("Touchdown", td, tc.extra))
+			assert.Equal(t, "TOUCHDOWN", drive.Result)
+			assert.Equal(t, tc.want, drive.Points)
+		})
+	}
+}
+
+func TestComputeDrives_CrossQuarter(t *testing.T) {
+	plays := onePlayDrive("Field goal",
+		nflverse.Play{PlayType: "pass", Down: 1, Quarter: 1, GameSecondsRemaining: 3000},
+		nflverse.Play{PlayType: "run", Down: 1, Quarter: 2, GameSecondsRemaining: 2700},
+		nflverse.Play{PlayType: "field_goal", Down: 4, Quarter: 2, FieldGoalResult: "made", GameSecondsRemaining: 2600},
+	)
+	for i := range plays {
+		plays[i].DriveQuarterStart, plays[i].DriveQuarterEnd = 1, 2
+	}
+
+	quarters := ComputeDrives(plays, "GB", "DAL")
+
+	require.Len(t, quarters, 1)
+	q1 := quarters[1]
+	require.Len(t, q1.Drives, 1)
+	assert.Equal(t, 3, q1.Drives[0].PlaysCount)
+	assert.Equal(t, 1, q1.Total["home"].Drives)
+	assert.NotContains(t, quarters, 2, "the drive is counted once, in the quarter it started")
+}
+
+func TestComputeDrives_Overtime(t *testing.T) {
+	plays := onePlayDrive("End of half",
+		nflverse.Play{PlayType: "pass", Down: 1, Quarter: 5},
+		nflverse.Play{PlayType: "run", Down: 2, Quarter: 5},
+	)
+
+	quarters := ComputeDrives(plays, "GB", "DAL")
+
+	require.Contains(t, quarters, 5)
+	assert.Equal(t, "END_OF_GAME", quarters[5].Drives[0].Result)
+}
+
+func TestComputeDrives_EndOfFirstHalf(t *testing.T) {
+	drive, _ := onlyDrive(t, onePlayDrive("End of half",
+		nflverse.Play{PlayType: "qb_kneel", Down: 1, Quarter: 2},
+	))
+
+	assert.Equal(t, "END_OF_HALF", drive.Result)
+}
+
+func TestComputeDrives_TimeOfPossessionFromNflverse(t *testing.T) {
+	plays := onePlayDrive("Punt", nflverse.Play{PlayType: "punt", Down: 4})
+	plays[0].DriveTimeOfPossession = "2:35"
+
+	drive, _ := onlyDrive(t, plays)
+
+	assert.Equal(t, "2:35", drive.TimeOfPossession)
 }
