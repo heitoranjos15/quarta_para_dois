@@ -336,7 +336,8 @@ func TestComputeDrives_PlayDetailFields(t *testing.T) {
 	assert.Equal(t, 75, play.Yardline)
 	assert.Equal(t, "pass", play.PlayType)
 	assert.Contains(t, play.Description, "Herbert")
-	assert.Equal(t, 1.2, play.EPA)
+	require.NotNil(t, play.EPA)
+	assert.Equal(t, 1.2, *play.EPA)
 	assert.Equal(t, "J.Herbert", play.Passer)
 	assert.Equal(t, "M.Williams", play.Receiver)
 	assert.Equal(t, "", play.Rusher)
@@ -354,7 +355,8 @@ func TestComputeDrives_ScoringPlay(t *testing.T) {
 	tdPlay := drive.Plays[3]
 
 	assert.True(t, tdPlay.IsScoringPlay)
-	assert.Equal(t, 4.2, tdPlay.EPA)
+	require.NotNil(t, tdPlay.EPA)
+	assert.Equal(t, 4.2, *tdPlay.EPA)
 }
 
 func TestFormatDuration(t *testing.T) {

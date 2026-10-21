@@ -264,7 +264,8 @@ func TestProcessPlays_PlayDetailFields(t *testing.T) {
 	assert.Equal(t, 75, play.Yardline)
 	assert.Equal(t, "pass", play.PlayType)
 	assert.Contains(t, play.Description, "Herbert")
-	assert.Equal(t, 1.2, play.EPA)
+	require.NotNil(t, play.EPA)
+	assert.Equal(t, 1.2, *play.EPA)
 	assert.Equal(t, "J.Herbert", play.Passer)
 	assert.Equal(t, "M.Williams", play.Receiver)
 	assert.Equal(t, "", play.Rusher)
@@ -280,7 +281,8 @@ func TestProcessPlays_ScoringPlay(t *testing.T) {
 	// Q1, 4th play is TD
 	tdPlay := details[0].Plays[3]
 	assert.True(t, tdPlay.IsScoringPlay)
-	assert.Equal(t, 4.2, tdPlay.EPA)
+	require.NotNil(t, tdPlay.EPA)
+	assert.Equal(t, 4.2, *tdPlay.EPA)
 }
 
 func TestProcessPlays_Interception(t *testing.T) {
@@ -290,7 +292,8 @@ func TestProcessPlays_Interception(t *testing.T) {
 	// Q2, 3rd play is INT
 	intPlay := details[1].Plays[2]
 	assert.Equal(t, "pass", intPlay.PlayType)
-	assert.Equal(t, -3.0, intPlay.EPA)
+	require.NotNil(t, intPlay.EPA)
+	assert.Equal(t, -3.0, *intPlay.EPA)
 	assert.Equal(t, "R.Wilson", intPlay.Passer)
 }
 

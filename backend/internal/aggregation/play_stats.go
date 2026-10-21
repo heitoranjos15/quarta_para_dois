@@ -15,7 +15,7 @@ type PlayDetail struct {
 	Yardline       int
 	PlayType       string
 	Description    string
-	EPA            float64
+	EPA            *float64 // nil when nflverse has no value
 	Passer         string
 	Receiver       string
 	Rusher         string
@@ -100,7 +100,7 @@ func processQuarter(quarter int, plays []nflverse.Play) QuarterPlays {
 			Yardline:      p.Yardline100,
 			PlayType:      p.PlayType,
 			Description:   p.Description,
-			EPA:           epa(p),
+			EPA:           p.EPA,
 			Passer:        p.PasserPlayerName,
 			Receiver:      p.ReceiverPlayerName,
 			Rusher:        p.RusherPlayerName,

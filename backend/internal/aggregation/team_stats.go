@@ -13,7 +13,9 @@ type TeamUnitStats struct {
 	PassRate         float64
 	RushEPA          float64
 	PassEPA          float64
-	RedZonePct       float64
+	RedZoneTrips     int     // drives that reached the opponent 20
+	RedZoneTDs       int     // of those, drives that ended in a touchdown
+	RedZonePct       float64 // RedZoneTDs / RedZoneTrips
 	ThirdDownPct     float64
 	FourthDownPct    float64
 	TimeOfPossession time.Duration
@@ -66,67 +68,51 @@ func filterPlays(plays []nflverse.Play, fn func(nflverse.Play) bool) []nflverse.
 	return result
 }
 
-func computeUnitStats(plays []nflverse.Play) TeamUnitStats {
+// isScrimmage is true for the plays team rates are computed on; timeouts, kickoffs,
+// extra points and no_play penalties are not plays in that sense.
+func isScrimmage(p nflverse.Play) bool {
+	return p.PlayType == "pass" || p.PlayType == "run"
+}
+
+// computeUnitStats takes every play of one unit (so drive-level numbers can see special teams
+// plays too) and computes the per-play rates on its scrimmage plays only.
+func computeUnitStats(allPlays []nflverse.Play) TeamUnitStats {
+	plays := filterPlays(allPlays, isScrimmage)
 	if len(plays) == 0 {
 		return TeamUnitStats{}
 	}
 
-	stats := TeamUnitStats{
-		Plays: len(plays),
-	}
+	stats := TeamUnitStats{Plays: len(plays)}
 
-	var totalEPA float64
-	var successPlays int
-	var passPlays int
-	var passEPA float64
-	var rushEPA float64
-	var redZonePlays int
-	var redZoneSuccess int
-	var thirdDownPlays int
-	var thirdDownConverted int
-	var fourthDownPlays int
-	var fourthDownConverted int
-	var lastGameSecondsRemaining map[int]int // drive -> game_seconds_remaining
-	var explosivePlays int
-	var turnovers int
-
-	lastGameSecondsRemaining = make(map[int]int)
+	var totalEPA, passEPA, rushEPA float64
+	var epaPlays, successPlays, passPlays int
+	var thirdDownPlays, thirdDownConverted, fourthDownPlays, fourthDownConverted int
 
 	for _, p := range plays {
-		// Total EPA
-		totalEPA += epa(p)
-
-		// Success rate (EPA > 0)
-		if epa(p) > 0 {
-			successPlays++
-		}
-
-		// Pass/Rush split
-		if p.PassAttempt == 1 {
+		if p.PlayType == "pass" {
 			passPlays++
-			passEPA += epa(p)
-		}
-		if p.RushAttempt == 1 {
-			rushEPA += epa(p)
 		}
 
-		// Red zone (yardline100 <= 20)
-		if p.Yardline100 <= 20 && p.Yardline100 > 0 {
-			redZonePlays++
-			if epa(p) > 0 || p.Touchdown == 1 {
-				redZoneSuccess++
+		// A play without EPA still counts as a play, but not in the EPA averages.
+		if p.EPA != nil {
+			epaPlays++
+			totalEPA += *p.EPA
+			if *p.EPA > 0 {
+				successPlays++
+			}
+			if p.PlayType == "pass" {
+				passEPA += *p.EPA
+			} else {
+				rushEPA += *p.EPA
 			}
 		}
 
-		// Third down
 		if p.Down == 3 {
 			thirdDownPlays++
 			if p.ThirdDownConverted == 1 {
 				thirdDownConverted++
 			}
 		}
-
-		// Fourth down
 		if p.Down == 4 {
 			fourthDownPlays++
 			if p.FourthDownConverted == 1 {
@@ -134,60 +120,77 @@ func computeUnitStats(plays []nflverse.Play) TeamUnitStats {
 			}
 		}
 
-		// Time of possession - track by drive
-		if p.Drive > 0 {
-			if lastSec, ok := lastGameSecondsRemaining[p.Drive]; ok {
-				diff := lastSec - p.GameSecondsRemaining
-				if diff > 0 && diff < 300 { // Sanity check: max 5 min per play
-					stats.TimeOfPossession += time.Duration(diff) * time.Second
-				}
-			}
-			lastGameSecondsRemaining[p.Drive] = p.GameSecondsRemaining
-		}
-
 		// Explosive plays: 20+ pass, 10+ rush
-		if p.PassAttempt == 1 && p.YardsGained >= 20 {
-			explosivePlays++
+		if p.PlayType == "pass" && p.YardsGained >= 20 {
+			stats.ExplosivePlays++
 		}
-		if p.RushAttempt == 1 && p.YardsGained >= 10 {
-			explosivePlays++
+		if p.PlayType == "run" && p.YardsGained >= 10 {
+			stats.ExplosivePlays++
 		}
 
-		// Turnovers
 		if p.Interception == 1 || p.FumbleLost == 1 {
-			turnovers++
+			stats.Turnovers++
 		}
 	}
 
-	// Compute averages/percentages
-	if stats.Plays > 0 {
-		stats.EPA_per_play = totalEPA / float64(stats.Plays)
-		stats.SuccessRate = float64(successPlays) / float64(stats.Plays)
-		stats.PassRate = float64(passPlays) / float64(stats.Plays)
-		stats.PassEPA = passEPA
-		stats.RushEPA = rushEPA
-
-		if redZonePlays > 0 {
-			stats.RedZonePct = float64(redZoneSuccess) / float64(redZonePlays)
-		}
-		if thirdDownPlays > 0 {
-			stats.ThirdDownPct = float64(thirdDownConverted) / float64(thirdDownPlays)
-		}
-		if fourthDownPlays > 0 {
-			stats.FourthDownPct = float64(fourthDownConverted) / float64(fourthDownPlays)
-		}
-
-		stats.ExplosivePlays = explosivePlays
-		stats.Turnovers = turnovers
+	if epaPlays > 0 {
+		stats.EPA_per_play = totalEPA / float64(epaPlays)
+		stats.SuccessRate = float64(successPlays) / float64(epaPlays)
 	}
+	stats.PassRate = float64(passPlays) / float64(stats.Plays)
+	stats.PassEPA = passEPA
+	stats.RushEPA = rushEPA
+	if thirdDownPlays > 0 {
+		stats.ThirdDownPct = float64(thirdDownConverted) / float64(thirdDownPlays)
+	}
+	if fourthDownPlays > 0 {
+		stats.FourthDownPct = float64(fourthDownConverted) / float64(fourthDownPlays)
+	}
+
+	stats.RedZoneTrips, stats.RedZoneTDs = redZoneTrips(allPlays)
+	if stats.RedZoneTrips > 0 {
+		stats.RedZonePct = float64(stats.RedZoneTDs) / float64(stats.RedZoneTrips)
+	}
+	stats.TimeOfPossession = timeOfPossession(allPlays)
 
 	return stats
 }
 
-// epa is a temporary nil-safe accessor; Task 10 replaces it with explicit nil handling.
-func epa(p nflverse.Play) float64 {
-	if p.EPA == nil {
-		return 0
+// redZoneTrips counts drives with a play inside the 20, and those that ended in a touchdown.
+func redZoneTrips(plays []nflverse.Play) (trips, tds int) {
+	reached := map[int]bool{}
+	result := map[int]string{}
+	for _, p := range plays {
+		if p.FixedDrive <= 0 {
+			continue
+		}
+		if p.Yardline100 > 0 && p.Yardline100 <= 20 {
+			reached[p.FixedDrive] = true
+		}
+		if p.FixedDriveResult != "" {
+			result[p.FixedDrive] = p.FixedDriveResult
+		}
 	}
-	return *p.EPA
+	for drive := range reached {
+		trips++
+		if result[drive] == "Touchdown" {
+			tds++
+		}
+	}
+	return trips, tds
+}
+
+// timeOfPossession sums nflverse's per-drive time over the distinct drives in plays.
+func timeOfPossession(plays []nflverse.Play) time.Duration {
+	seen := map[int]bool{}
+	var total time.Duration
+	for _, p := range plays {
+		if p.FixedDrive <= 0 || seen[p.FixedDrive] || p.DriveTimeOfPossession == "" {
+			continue
+		}
+		seen[p.FixedDrive] = true
+		mmss := parseTime(p.DriveTimeOfPossession)
+		total += time.Duration(mmss[0])*time.Minute + time.Duration(mmss[1])*time.Second
+	}
+	return total
 }
