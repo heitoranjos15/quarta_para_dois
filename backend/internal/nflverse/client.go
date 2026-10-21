@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow/go/v16/arrow"
@@ -14,13 +15,13 @@ import (
 	"github.com/apache/arrow/go/v16/arrow/memory"
 	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/apache/arrow/go/v16/parquet/pqarrow"
+	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/singleflight"
 
 	"quarta-para-dois/backend/internal/cache"
 )
 
 const (
-	pbpBaseURL       = "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_%d.parquet"
 	schedulesBaseURL = "https://github.com/nflverse/nflverse-data/releases/download/schedules/schedules_%d.parquet"
 
 	cacheTTL = time.Hour
@@ -30,38 +31,28 @@ type Client struct {
 	cache       cache.Cache
 	httpClient  *http.Client
 	githubToken string
+	opts        Options
 	sfGroup     singleflight.Group
+
+	games *lru.Cache[string, []Play]
+
+	mu              sync.Mutex
+	seasonFetchedAt map[int]time.Time
 }
 
-func NewClient(c cache.Cache, githubToken string) *Client {
+func NewClient(c cache.Cache, githubToken string, opts Options) *Client {
+	opts = opts.withDefaults()
+	games, _ := lru.New[string, []Play](opts.MemoryGames) // only errors for size <= 0
 	return &Client{
 		cache:       c,
 		githubToken: githubToken,
+		opts:        opts,
+		games:       games,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Minute,
 		},
+		seasonFetchedAt: map[int]time.Time{},
 	}
-}
-
-func (c *Client) GetPBP(season int) ([]Play, error) {
-	cacheKey := fmt.Sprintf("pbp:%d", season)
-	var plays []Play
-	if c.cacheGet(cacheKey, &plays) {
-		return plays, nil
-	}
-
-	result, err, _ := c.sfGroup.Do(cacheKey, func() (any, error) {
-		plays, err := c.downloadAndParsePBP(season)
-		if err != nil {
-			return nil, err
-		}
-		c.cacheSet(cacheKey, plays, cacheTTL)
-		return plays, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result.([]Play), nil
 }
 
 func (c *Client) GetSchedules(season int) ([]Game, error) {
@@ -85,22 +76,9 @@ func (c *Client) GetSchedules(season int) ([]Game, error) {
 	return result.([]Game), nil
 }
 
-func (c *Client) downloadAndParsePBP(season int) ([]Play, error) {
-	url := fmt.Sprintf(pbpBaseURL, season)
-	return c.downloadAndParsePBPURL(url)
-}
-
 func (c *Client) downloadAndParseSchedules(season int) ([]Game, error) {
 	url := fmt.Sprintf(schedulesBaseURL, season)
 	return c.downloadAndParseSchedulesURL(url)
-}
-
-func (c *Client) downloadAndParsePBPURL(url string) ([]Play, error) {
-	data, err := c.download(url)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePlays(bytes.NewReader(data))
 }
 
 func (c *Client) downloadAndParseSchedulesURL(url string) ([]Game, error) {
@@ -114,7 +92,7 @@ func (c *Client) downloadAndParseSchedulesURL(url string) ([]Game, error) {
 }
 
 func (c *Client) downloadAndParse(url string, parseFn func(*file.Reader) (any, error)) (any, error) {
-	data, err := c.download(url)
+	data, err := c.download(context.Background(), url)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +106,8 @@ func (c *Client) downloadAndParse(url string, parseFn func(*file.Reader) (any, e
 	return parseFn(pqReader)
 }
 
-func (c *Client) download(url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(context.Background(), "GET", url, nil)
+func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}

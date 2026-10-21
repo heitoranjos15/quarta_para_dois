@@ -47,7 +47,10 @@ func main() {
 	slog.SetDefault(logger)
 
 	sharedCache := cache.NewRedis(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS)
-	nflClient := nflverse.NewClient(sharedCache, cfg.GitHubToken)
+	nflClient := nflverse.NewClient(sharedCache, cfg.GitHubToken, nflverse.Options{
+		PBPURLFormat: cfg.PBPURLFormat,
+		GamesCSVURL:  cfg.GamesCSVURL,
+	})
 	espnClient := nflverse.NewESPNClient(sharedCache)
 
 	r := chi.NewRouter()
@@ -70,11 +73,11 @@ func main() {
 		r.Get("/games/{gameID}/stats", handlers.GameStatsHandler(nflClient))
 		r.Get("/games/{gameID}/plays", handlers.GamePlaysHandler(nflClient))
 		r.Get("/games/{gameID}/drives", handlers.GameDrivesHandler(nflClient))
-		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(nflClient, espnClient))
-		r.Get("/games/{gameID}", handlers.GameDetailHandler(nflClient, espnClient))
+		r.Get("/games/{gameID}/notes", handlers.GameNotesHandler(espnClient))
+		r.Get("/games/{gameID}", handlers.GameDetailHandler(espnClient))
 
 		// Teams
-		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(nflClient, espnClient))
+		r.Get("/teams/{abbr}/games", handlers.TeamGamesHandler(espnClient))
 	})
 
 	logger.Info("server starting", "port", cfg.Port)

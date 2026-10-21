@@ -3,10 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -60,9 +60,14 @@ type VegasInfo struct {
 	AwayML int     `json:"away_ml"`
 }
 
-type nflverseClientInterface interface {
-	GetPBP(season int) ([]nflverse.Play, error)
-	GetSchedules(season int) ([]nflverse.Game, error)
+// PlaysSource serves one game's play-by-play.
+type PlaysSource interface {
+	GamePlays(ctx context.Context, gameID string) ([]nflverse.Play, error)
+}
+
+// parseGameID accepts nflverse game IDs such as 2026_06_WAS_SF.
+func parseGameID(id string) (season, week int, ok bool) {
+	return nflverse.ParseGameID(id)
 }
 
 func respond[T any](w http.ResponseWriter, data T, cached bool, season int, statusCode int) {
@@ -85,25 +90,26 @@ func respondError(w http.ResponseWriter, message string, statusCode int) {
 	}
 }
 
-func extractSeason(gameID string) int {
-	// Format: 2024_01_LAC_DEN
-	parts := strings.Split(gameID, "_")
-	if len(parts) > 0 {
-		if season, err := strconv.Atoi(parts[0]); err == nil {
-			return season
-		}
+// gamePlays validates the game ID and loads its plays, writing the error response itself.
+func gamePlays(w http.ResponseWriter, r *http.Request, src PlaysSource) (gameID string, season int, plays []nflverse.Play, ok bool) {
+	gameID = chi.URLParam(r, "gameID")
+	season, _, valid := parseGameID(gameID)
+	if !valid {
+		respondError(w, "invalid game id", http.StatusBadRequest)
+		return "", 0, nil, false
 	}
-	return time.Now().Year()
-}
 
-func filterPlaysByGame(plays []nflverse.Play, gameID string) []nflverse.Play {
-	var result []nflverse.Play
-	for _, p := range plays {
-		if p.GameID == gameID {
-			result = append(result, p)
-		}
+	plays, err := src.GamePlays(r.Context(), gameID)
+	if errors.Is(err, nflverse.ErrGameNotFound) || (err == nil && len(plays) == 0) {
+		respondError(w, "game not available yet", http.StatusNotFound)
+		return "", 0, nil, false
 	}
-	return result
+	if err != nil {
+		slog.Error("fetch play data", "game_id", gameID, "err", err)
+		respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
+		return "", 0, nil, false
+	}
+	return gameID, season, plays, true
 }
 
 func SeasonsListHandler(w http.ResponseWriter, r *http.Request) {
@@ -172,10 +178,10 @@ func SeasonsGamesHandler(espnClient espnClientInterface) http.HandlerFunc {
 	}
 }
 
-func GameDetailHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
+func GameDetailHandler(espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
-		season := extractSeason(gameID)
+		season, _, _ := parseGameID(gameID)
 
 		ctx := r.Context()
 		game, err := espnClient.GetGame(ctx, season, 0, gameID) // week=0 means search all weeks
@@ -194,82 +200,43 @@ func GameDetailHandler(nflClient nflverseClientInterface, espnClient espnClientI
 	}
 }
 
-func GameStatsHandler(client nflverseClientInterface) http.HandlerFunc {
+func GameStatsHandler(src PlaysSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gameID := chi.URLParam(r, "gameID")
-		season := extractSeason(gameID)
-
-		plays, err := client.GetPBP(season)
-		if err != nil {
-			slog.Error("fetch play data", "game_id", gameID, "err", err)
-			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
+		_, season, plays, ok := gamePlays(w, r, src)
+		if !ok {
 			return
 		}
-
-		gamePlays := filterPlaysByGame(plays, gameID)
-		if len(gamePlays) == 0 {
-			respondError(w, "game not found", http.StatusNotFound)
-			return
-		}
-
-		stats := aggregation.ComputeTeamStats(gamePlays)
-		respond(w, stats, true, season, http.StatusOK)
+		respond(w, aggregation.ComputeTeamStats(plays), true, season, http.StatusOK)
 	}
 }
 
-func GamePlaysHandler(client nflverseClientInterface) http.HandlerFunc {
+func GamePlaysHandler(src PlaysSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gameID := chi.URLParam(r, "gameID")
-		season := extractSeason(gameID)
+		_, season, gamePlays, ok := gamePlays(w, r, src)
+		if !ok {
+			return
+		}
 
 		// Optional query params for filtering
-		quarterStr := r.URL.Query().Get("quarter")
-		driveStr := r.URL.Query().Get("drive")
-
-		plays, err := client.GetPBP(season)
-		if err != nil {
-			slog.Error("fetch play data", "game_id", gameID, "err", err)
-			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
-			return
+		if quarter, err := strconv.Atoi(r.URL.Query().Get("quarter")); err == nil {
+			gamePlays = filterPlays(gamePlays, func(p nflverse.Play) bool { return p.Quarter == quarter })
+		}
+		if drive, err := strconv.Atoi(r.URL.Query().Get("drive")); err == nil {
+			gamePlays = filterPlays(gamePlays, func(p nflverse.Play) bool { return p.FixedDrive == drive })
 		}
 
-		gamePlays := filterPlaysByGame(plays, gameID)
-		if len(gamePlays) == 0 {
-			respondError(w, "game not found", http.StatusNotFound)
-			return
-		}
-
-		// Filter by quarter if specified
-		if quarterStr != "" {
-			quarter, err := strconv.Atoi(quarterStr)
-			if err == nil {
-				var filtered []nflverse.Play
-				for _, p := range gamePlays {
-					if p.Quarter == quarter {
-						filtered = append(filtered, p)
-					}
-				}
-				gamePlays = filtered
-			}
-		}
-
-		// Filter by drive if specified
-		if driveStr != "" {
-			drive, err := strconv.Atoi(driveStr)
-			if err == nil {
-				var filtered []nflverse.Play
-				for _, p := range gamePlays {
-					if p.Drive == drive {
-						filtered = append(filtered, p)
-					}
-				}
-				gamePlays = filtered
-			}
-		}
-
-		details := aggregation.ProcessPlays(gamePlays)
-		respond(w, details, true, season, http.StatusOK)
+		respond(w, aggregation.ProcessPlays(gamePlays), true, season, http.StatusOK)
 	}
+}
+
+func filterPlays(plays []nflverse.Play, keep func(nflverse.Play) bool) []nflverse.Play {
+	var out []nflverse.Play
+	for _, p := range plays {
+		if keep(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 type DriveSummaryResponse struct {
@@ -277,40 +244,23 @@ type DriveSummaryResponse struct {
 	Overtime *aggregation.QuarterDriveSummary        `json:"overtime,omitempty"`
 }
 
-func GameDrivesHandler(client nflverseClientInterface) http.HandlerFunc {
+func GameDrivesHandler(src PlaysSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		gameID := chi.URLParam(r, "gameID")
-		season := extractSeason(gameID)
-
-		plays, err := client.GetPBP(season)
-		if err != nil {
-			slog.Error("fetch play data", "game_id", gameID, "err", err)
-			respondError(w, "failed to fetch play data", http.StatusServiceUnavailable)
-			return
-		}
-
-		gamePlays := filterPlaysByGame(plays, gameID)
-		if len(gamePlays) == 0 {
-			respondError(w, "game not found", http.StatusNotFound)
+		_, season, plays, ok := gamePlays(w, r, src)
+		if !ok {
 			return
 		}
 
 		// Get home and away teams from the first play
-		homeTeam := gamePlays[0].HomeTeam
-		awayTeam := gamePlays[0].AwayTeam
-
-		quarters := aggregation.ComputeDrives(gamePlays, homeTeam, awayTeam)
-		response := DriveSummaryResponse{
-			Quarters: quarters,
-		}
-		respond(w, response, true, season, http.StatusOK)
+		quarters := aggregation.ComputeDrives(plays, plays[0].HomeTeam, plays[0].AwayTeam)
+		respond(w, DriveSummaryResponse{Quarters: quarters}, true, season, http.StatusOK)
 	}
 }
 
-func GameNotesHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
+func GameNotesHandler(espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gameID := chi.URLParam(r, "gameID")
-		season := extractSeason(gameID)
+		season, _, _ := parseGameID(gameID)
 
 		ctx := r.Context()
 		game, err := espnClient.GetGame(ctx, season, 0, gameID)
@@ -344,7 +294,7 @@ func GameNotesHandler(nflClient nflverseClientInterface, espnClient espnClientIn
 	}
 }
 
-func TeamGamesHandler(nflClient nflverseClientInterface, espnClient espnClientInterface) http.HandlerFunc {
+func TeamGamesHandler(espnClient espnClientInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		teamAbbr := chi.URLParam(r, "abbr")
 		seasonStr := r.URL.Query().Get("season")
