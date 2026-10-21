@@ -20,6 +20,10 @@ const (
 
 	finalTTL    = 30 * 24 * time.Hour
 	upcomingTTL = time.Hour
+	recheckTTL  = time.Minute // a game past kickoff that ESPN still lists as scheduled
+
+	// Bump when the cached value's shape changes, so values from older builds are ignored.
+	cacheVersion = "v2"
 )
 
 type Status string
@@ -45,12 +49,14 @@ type Event struct {
 type Options struct {
 	BaseURL string
 	HTTP    *http.Client
+	Now     func() time.Time // default time.Now
 }
 
 type Client struct {
 	cache cache.Cache
 	http  *http.Client
 	base  string
+	now   func() time.Time
 }
 
 func NewClient(c cache.Cache, opts Options) *Client {
@@ -60,11 +66,14 @@ func NewClient(c cache.Cache, opts Options) *Client {
 	if opts.HTTP == nil {
 		opts.HTTP = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Client{cache: c, http: opts.HTTP, base: strings.TrimRight(opts.BaseURL, "/")}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
+	return &Client{cache: c, http: opts.HTTP, base: strings.TrimRight(opts.BaseURL, "/"), now: opts.Now}
 }
 
 func (c *Client) Scoreboard(ctx context.Context, season, seasonType, week int) ([]Event, error) {
-	key := fmt.Sprintf("espn:scoreboard:%d:%d:%d", season, seasonType, week)
+	key := fmt.Sprintf("espn:%s:scoreboard:%d:%d:%d", cacheVersion, season, seasonType, week)
 	url := fmt.Sprintf("%s/scoreboard?seasontype=%d&week=%d&dates=%d", c.base, seasonType, week, season)
 	return c.events(ctx, key, url)
 }
@@ -72,7 +81,7 @@ func (c *Client) Scoreboard(ctx context.Context, season, seasonType, week int) (
 // TeamSchedule takes an nflverse team abbreviation.
 func (c *Client) TeamSchedule(ctx context.Context, nflverseAbbr string, season int) ([]Event, error) {
 	slug := teamSlug(nflverseAbbr)
-	key := fmt.Sprintf("espn:team:%s:%d", slug, season)
+	key := fmt.Sprintf("espn:%s:team:%s:%d", cacheVersion, slug, season)
 	url := fmt.Sprintf("%s/teams/%s/schedule?season=%d", c.base, slug, season)
 	return c.events(ctx, key, url)
 }
@@ -90,7 +99,7 @@ func (c *Client) events(ctx context.Context, key, url string) ([]Event, error) {
 		return nil, err
 	}
 
-	if ttl, cacheable := scoreboardTTL(events); cacheable {
+	if ttl, cacheable := scoreboardTTL(events, c.now()); cacheable {
 		if err := c.cache.Set(ctx, key, events, ttl); err != nil {
 			slog.Warn("cache set", "key", key, "err", err)
 		}
@@ -98,23 +107,28 @@ func (c *Client) events(ctx context.Context, key, url string) ([]Event, error) {
 	return events, nil
 }
 
-// scoreboardTTL: finished games are kept 30 days, upcoming ones 1 hour, and
-// nothing is cached while any game is in progress.
-func scoreboardTTL(events []Event) (ttl time.Duration, cacheable bool) {
-	allFinal := true
+// scoreboardTTL: finished games are kept 30 days. Upcoming ones are kept 1 hour, or only
+// until the next kickoff if that is sooner. Nothing is cached while any game is in progress,
+// and an empty answer isn't cached either (ESPN may not have published that week yet).
+func scoreboardTTL(events []Event, now time.Time) (ttl time.Duration, cacheable bool) {
+	if len(events) == 0 {
+		return 0, false
+	}
+	ttl = finalTTL
 	for _, e := range events {
 		switch e.Status {
 		case StatusInProgress:
 			return 0, false
 		case StatusFinal:
 		default:
-			allFinal = false
+			untilKickoff := upcomingTTL
+			if !e.Kickoff.IsZero() {
+				untilKickoff = max(e.Kickoff.Sub(now), recheckTTL)
+			}
+			ttl = min(ttl, upcomingTTL, untilKickoff)
 		}
 	}
-	if allFinal {
-		return finalTTL, true
-	}
-	return upcomingTTL, true
+	return ttl, true
 }
 
 // teamSlug maps an nflverse abbreviation to ESPN's team slug.

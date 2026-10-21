@@ -104,20 +104,47 @@ func TestScoreboard_ScheduledHasNoScores(t *testing.T) {
 }
 
 func TestScoreboardTTL(t *testing.T) {
+	now := time.Date(2026, 10, 25, 16, 30, 0, 0, time.UTC)
 	final := Event{Status: StatusFinal}
-	scheduled := Event{Status: StatusScheduled}
+	scheduled := Event{Status: StatusScheduled, Kickoff: now.Add(3 * time.Hour)}
 	live := Event{Status: StatusInProgress}
 
-	ttl, ok := scoreboardTTL([]Event{final, final})
+	ttl, ok := scoreboardTTL([]Event{final, final}, now)
 	assert.True(t, ok)
 	assert.Equal(t, 30*24*time.Hour, ttl)
 
-	ttl, ok = scoreboardTTL([]Event{final, scheduled})
+	ttl, ok = scoreboardTTL([]Event{final, scheduled}, now)
 	assert.True(t, ok)
 	assert.Equal(t, time.Hour, ttl)
 
-	_, ok = scoreboardTTL([]Event{final, scheduled, live})
+	_, ok = scoreboardTTL([]Event{final, scheduled, live}, now)
 	assert.False(t, ok, "a game in progress means nothing is cached")
+}
+
+func TestScoreboardTTL_EmptyIsNotCached(t *testing.T) {
+	_, ok := scoreboardTTL(nil, time.Now())
+	assert.False(t, ok, "an empty answer is not 'all final': ESPN may not have published the week yet")
+}
+
+func TestScoreboardTTL_EndsAtNextKickoff(t *testing.T) {
+	now := time.Date(2026, 10, 25, 16, 30, 0, 0, time.UTC)
+	soon := Event{Status: StatusScheduled, Kickoff: now.Add(30 * time.Minute)}
+	later := Event{Status: StatusScheduled, Kickoff: now.Add(4 * time.Hour)}
+
+	ttl, ok := scoreboardTTL([]Event{later, soon}, now)
+
+	assert.True(t, ok)
+	assert.Equal(t, 30*time.Minute, ttl)
+}
+
+func TestScoreboardTTL_PastKickoffStillScheduled(t *testing.T) {
+	now := time.Date(2026, 10, 25, 16, 30, 0, 0, time.UTC)
+	delayed := Event{Status: StatusScheduled, Kickoff: now.Add(-5 * time.Minute)}
+
+	ttl, ok := scoreboardTTL([]Event{delayed}, now)
+
+	assert.True(t, ok)
+	assert.Equal(t, time.Minute, ttl, "a game that should have started is rechecked soon")
 }
 
 // withLiveGame marks the first event of a scoreboard payload as in progress.
@@ -199,4 +226,31 @@ func TestTeamSlug(t *testing.T) {
 	assert.Equal(t, "wsh", teamSlug("WAS"))
 	assert.Equal(t, "lar", teamSlug("LA"))
 	assert.Equal(t, "kc", teamSlug("KC"))
+}
+
+func TestScoreboard_EmptyNotCached(t *testing.T) {
+	f := newFakeESPN(t, []byte(`{"events":[]}`))
+	c := f.client(t)
+
+	for i := 0; i < 2; i++ {
+		events, err := c.Scoreboard(context.Background(), 2026, 2, 18)
+		require.NoError(t, err)
+		assert.Empty(t, events)
+	}
+
+	assert.Equal(t, int32(2), f.requests.Load())
+}
+
+func TestTeamSchedule_IgnoresOldClientCacheEntry(t *testing.T) {
+	f := newFakeESPN(t, fixture(t, "team_schedule.json"))
+	mr := miniredis.RunT(t)
+	// The value the previous ESPN client stored under this key (a []nflverse.Game).
+	require.NoError(t, mr.Set("espn:team:wsh:2026", `[{"GameID":"2026_01_WSH_PHI","Season":2026,"HomeTeam":"PHI","AwayTeam":"WSH","HomeScore":24,"AwayScore":22}]`))
+	c := NewClient(cache.NewRedis(mr.Addr(), "", false), Options{BaseURL: f.srv.URL})
+
+	events, err := c.TeamSchedule(context.Background(), "WAS", 2026)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), f.requests.Load())
+	assert.Equal(t, "401872929", events[0].ID)
 }
