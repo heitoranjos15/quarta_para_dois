@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/apache/arrow/go/v16/parquet/file"
 	"github.com/apache/arrow/go/v16/parquet/pqarrow"
 	"golang.org/x/sync/singleflight"
+
+	"quarta-para-dois/backend/internal/cache"
 )
 
 const (
@@ -26,15 +29,15 @@ const (
 )
 
 type Client struct {
-	cache       Cache
+	cache       cache.Cache
 	httpClient  *http.Client
 	githubToken string
 	sfGroup     singleflight.Group
 }
 
-func NewClient(cache Cache, githubToken string) *Client {
+func NewClient(c cache.Cache, githubToken string) *Client {
 	return &Client{
-		cache:       cache,
+		cache:       c,
 		githubToken: githubToken,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Minute,
@@ -45,7 +48,7 @@ func NewClient(cache Cache, githubToken string) *Client {
 func (c *Client) GetPBP(season int) ([]Play, error) {
 	cacheKey := fmt.Sprintf("pbp:%d", season)
 	var plays []Play
-	if c.cache.Get(cacheKey, &plays) {
+	if c.cacheGet(cacheKey, &plays) {
 		return plays, nil
 	}
 
@@ -54,7 +57,7 @@ func (c *Client) GetPBP(season int) ([]Play, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set(cacheKey, plays, cacheTTL)
+		c.cacheSet(cacheKey, plays, cacheTTL)
 		return plays, nil
 	})
 	if err != nil {
@@ -66,7 +69,7 @@ func (c *Client) GetPBP(season int) ([]Play, error) {
 func (c *Client) GetSchedules(season int) ([]Game, error) {
 	cacheKey := fmt.Sprintf("schedules:%d", season)
 	var games []Game
-	if c.cache.Get(cacheKey, &games) {
+	if c.cacheGet(cacheKey, &games) {
 		return games, nil
 	}
 
@@ -75,7 +78,7 @@ func (c *Client) GetSchedules(season int) ([]Game, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set(cacheKey, games, cacheTTL)
+		c.cacheSet(cacheKey, games, cacheTTL)
 		return games, nil
 	})
 	if err != nil {
@@ -87,7 +90,7 @@ func (c *Client) GetSchedules(season int) ([]Game, error) {
 func (c *Client) GetTeams() ([]Team, error) {
 	cacheKey := "teams"
 	var teams []Team
-	if c.cache.Get(cacheKey, &teams) {
+	if c.cacheGet(cacheKey, &teams) {
 		return teams, nil
 	}
 
@@ -96,7 +99,7 @@ func (c *Client) GetTeams() ([]Team, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set(cacheKey, teams, cacheTTL)
+		c.cacheSet(cacheKey, teams, cacheTTL)
 		return teams, nil
 	})
 	if err != nil {
@@ -108,7 +111,7 @@ func (c *Client) GetTeams() ([]Team, error) {
 func (c *Client) GetRosters(season int) ([]Roster, error) {
 	cacheKey := fmt.Sprintf("rosters:%d", season)
 	var rosters []Roster
-	if c.cache.Get(cacheKey, &rosters) {
+	if c.cacheGet(cacheKey, &rosters) {
 		return rosters, nil
 	}
 
@@ -117,7 +120,7 @@ func (c *Client) GetRosters(season int) ([]Roster, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.cache.Set(cacheKey, rosters, cacheTTL)
+		c.cacheSet(cacheKey, rosters, cacheTTL)
 		return rosters, nil
 	})
 	if err != nil {
@@ -536,5 +539,21 @@ func getFloat64(record arrow.Record, name string, row int) float64 {
 		return float64(arr.Value(row))
 	default:
 		return 0
+	}
+}
+
+// cacheGet treats a cache error as a miss, after logging it.
+func (c *Client) cacheGet(key string, dest any) bool {
+	ok, err := c.cache.Get(context.Background(), key, dest)
+	if err != nil {
+		slog.Warn("cache get", "key", key, "err", err)
+		return false
+	}
+	return ok
+}
+
+func (c *Client) cacheSet(key string, val any, ttl time.Duration) {
+	if err := c.cache.Set(context.Background(), key, val, ttl); err != nil {
+		slog.Warn("cache set", "key", key, "err", err)
 	}
 }

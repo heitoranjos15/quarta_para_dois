@@ -15,3 +15,10 @@ func TestLoadConfig(t *testing.T) {
 	assert.Equal(t, "localhost:6379", cfg.RedisAddr)
 	assert.Equal(t, "8080", cfg.Port)
 }
+
+func TestLoad_RedisTLS(t *testing.T) {
+	t.Setenv("REDIS_TLS", "true")
+	cfg, err := Load()
+	assert.NoError(t, err)
+	assert.True(t, cfg.RedisTLS)
+}

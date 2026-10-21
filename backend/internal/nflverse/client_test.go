@@ -2,10 +2,11 @@ package nflverse
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"quarta-para-dois/backend/internal/cache"
 )
 
 func TestClient_GetPBP(t *testing.T) {
@@ -13,8 +14,8 @@ func TestClient_GetPBP(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cache := NewRedisCache("localhost:6379", "")
-	client := NewClient(cache, "")
+	c := cache.NewRedis("localhost:6379", "", false)
+	client := NewClient(c, "")
 
 	plays, err := client.GetPBP(2024)
 	require.NoError(t, err)
@@ -31,8 +32,8 @@ func TestClient_GetSchedules(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cache := NewRedisCache("localhost:6379", "")
-	client := NewClient(cache, "")
+	c := cache.NewRedis("localhost:6379", "", false)
+	client := NewClient(c, "")
 
 	_, err := client.GetSchedules(2024)
 	// nflverse doesn't publish schedules parquet yet (404)
@@ -47,8 +48,8 @@ func TestClient_GetTeams(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cache := NewRedisCache("localhost:6379", "")
-	client := NewClient(cache, "")
+	c := cache.NewRedis("localhost:6379", "", false)
+	client := NewClient(c, "")
 
 	_, err := client.GetTeams()
 	// nflverse doesn't publish teams parquet yet (404)
@@ -63,8 +64,8 @@ func TestClient_GetRosters(t *testing.T) {
 		t.Skip("skipping integration test")
 	}
 
-	cache := NewRedisCache("localhost:6379", "")
-	client := NewClient(cache, "")
+	c := cache.NewRedis("localhost:6379", "", false)
+	client := NewClient(c, "")
 
 	_, err := client.GetRosters(2024)
 	// nflverse doesn't publish rosters parquet yet (404)
@@ -72,22 +73,4 @@ func TestClient_GetRosters(t *testing.T) {
 		assert.Contains(t, err.Error(), "404")
 		return
 	}
-}
-
-func TestClientCache_SetGet(t *testing.T) {
-	cache := NewRedisCache("localhost:6379", "")
-
-	testKey := "test_key_" + time.Now().Format("150405.000")
-	testValue := "test_value"
-
-	cache.Set(testKey, testValue, time.Minute)
-	var val string
-	ok := cache.Get(testKey, &val)
-
-	assert.True(t, ok)
-	assert.Equal(t, testValue, val)
-
-	cache.Delete(testKey)
-	ok = cache.Get(testKey, &val)
-	assert.False(t, ok)
 }

@@ -297,17 +297,23 @@ npm run build
 
 ### API (Fly.io)
 ```bash
-# One-time setup
-flyctl launch --name quarta-para-dois-api --dockerfile backend/Dockerfile
-flyctl secrets set REDIS_ADDR=... REDIS_PASSWORD=... GITHUB_TOKEN=...
+# One-time setup (run from backend/, where fly.toml lives)
+cd backend
+flyctl launch --name quarta-para-dois-api --dockerfile Dockerfile --no-deploy
 
-# Deploy (automatic via GitHub Actions on push to main)
-flyctl deploy
+# Redis: Upstash free tier. Use the endpoint host:port and password from its dashboard
+fly secrets set REDIS_ADDR=<host>:<port> REDIS_PASSWORD=<token> REDIS_TLS=true GITHUB_TOKEN=...
+
+# Deploy (automatic via GitHub Actions on push to master)
+flyctl deploy --remote-only
 ```
 
+Add a `FLY_API_TOKEN` repository secret (`fly tokens create deploy`) so the `Deploy API` workflow can deploy.
+
 ### Frontend (GitHub Pages)
-- Push to `main` triggers `.github/workflows/frontend.yml`
-- Builds Vite app → deploys to `gh-pages` branch
+- Set the repository's Pages source to the `gh-pages` branch
+- Push to `master` triggers `.github/workflows/frontend.yml`
+- Builds Vite app with `VITE_BASE=/quarta_para_dois/` → deploys to `gh-pages` branch
 - Available at `https://<username>.github.io/quarta_para_dois/`
 
 ## Data Sources

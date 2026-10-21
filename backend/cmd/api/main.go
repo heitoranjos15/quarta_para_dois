@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
+	"quarta-para-dois/backend/internal/cache"
 	"quarta-para-dois/backend/internal/config"
 	"quarta-para-dois/backend/internal/handlers"
 	"quarta-para-dois/backend/internal/middleware"
@@ -45,9 +46,9 @@ func main() {
 	logger := newLogger(cfg.Env, os.Stdout)
 	slog.SetDefault(logger)
 
-	cache := nflverse.NewRedisCache(cfg.RedisAddr, cfg.RedisPassword)
-	nflClient := nflverse.NewClient(cache, cfg.GitHubToken)
-	espnClient := nflverse.NewESPNClient(cfg.RedisAddr, cfg.RedisPassword)
+	sharedCache := cache.NewRedis(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS)
+	nflClient := nflverse.NewClient(sharedCache, cfg.GitHubToken)
+	espnClient := nflverse.NewESPNClient(sharedCache)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.RequestID)

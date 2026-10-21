@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"quarta-para-dois/backend/internal/cache"
 )
 
 const (
@@ -140,17 +141,13 @@ type ESPNTeam struct {
 
 type ESPNClient struct {
 	httpClient *http.Client
-	cache      *redis.Client
+	cache      cache.Cache
 }
 
-func NewESPNClient(redisAddr, redisPassword string) *ESPNClient {
+func NewESPNClient(c cache.Cache) *ESPNClient {
 	return &ESPNClient{
 		httpClient: &http.Client{Timeout: 10 * time.Second},
-		cache: redis.NewClient(&redis.Options{
-			Addr:     redisAddr,
-			Password: redisPassword,
-			DB:       0,
-		}),
+		cache:      c,
 	}
 }
 
@@ -158,11 +155,11 @@ func (c *ESPNClient) GetSchedule(ctx context.Context, season, week int) ([]Game,
 	cacheKey := fmt.Sprintf(espnCacheKey, season, week)
 
 	// Try cache first
-	if cached, err := c.cache.Get(ctx, cacheKey).Bytes(); err == nil {
-		var games []Game
-		if json.Unmarshal(cached, &games) == nil {
-			return games, nil
-		}
+	var cached []Game
+	if ok, err := c.cache.Get(ctx, cacheKey, &cached); err != nil {
+		slog.Warn("cache get", "key", cacheKey, "err", err)
+	} else if ok {
+		return cached, nil
 	}
 
 	// Build ESPN URL
@@ -197,8 +194,8 @@ func (c *ESPNClient) GetSchedule(ctx context.Context, season, week int) ([]Game,
 	games := c.convertEvents(espnResp.Events, season, week)
 
 	// Cache the result
-	if data, err := json.Marshal(games); err == nil {
-		c.cache.Set(ctx, cacheKey, data, espnCacheTTL)
+	if err := c.cache.Set(ctx, cacheKey, games, espnCacheTTL); err != nil {
+		slog.Warn("cache set", "key", cacheKey, "err", err)
 	}
 
 	return games, nil
@@ -277,11 +274,11 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 	cacheKey := fmt.Sprintf("espn:team:%s:%d", strings.ToLower(teamAbbr), season)
 
 	// Try cache first
-	if cached, err := c.cache.Get(ctx, cacheKey).Bytes(); err == nil {
-		var games []Game
-		if json.Unmarshal(cached, &games) == nil {
-			return games, nil
-		}
+	var cached []Game
+	if ok, err := c.cache.Get(ctx, cacheKey, &cached); err != nil {
+		slog.Warn("cache get", "key", cacheKey, "err", err)
+	} else if ok {
+		return cached, nil
 	}
 
 	// ESPN team abbreviation mapping
@@ -341,8 +338,8 @@ func (c *ESPNClient) GetTeamSchedule(ctx context.Context, teamAbbr string, seaso
 	}
 
 	// Cache the result
-	if data, err := json.Marshal(filtered); err == nil {
-		c.cache.Set(ctx, cacheKey, data, espnCacheTTL)
+	if err := c.cache.Set(ctx, cacheKey, filtered, espnCacheTTL); err != nil {
+		slog.Warn("cache set", "key", cacheKey, "err", err)
 	}
 
 	return filtered, nil
