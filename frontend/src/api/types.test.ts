@@ -8,6 +8,8 @@ const unit = (overrides: Partial<TeamUnitStatsAPI> = {}): TeamUnitStatsAPI => ({
   PassRate: 0,
   RushEPA: 0,
   PassEPA: 0,
+  RedZoneTrips: 0,
+  RedZoneTDs: 0,
   RedZonePct: 0,
   ThirdDownPct: 0,
   FourthDownPct: 0,

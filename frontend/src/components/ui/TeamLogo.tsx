@@ -19,6 +19,7 @@ const teamColors: Record<string, { primary: string; secondary: string; primaryDa
   KC: { primary: '#E31837', secondary: '#FFB81C', primaryDark: '#FF4D4D', secondaryDark: '#FFD600' },
   LV: { primary: '#000000', secondary: '#A5ACAF', primaryDark: '#4A4A4A', secondaryDark: '#E0E0E0' },
   LAC: { primary: '#0080C6', secondary: '#FFC20E', primaryDark: '#4DD1FF', secondaryDark: '#FFD600' },
+  LA: { primary: '#003594', secondary: '#FFA300', primaryDark: '#3D6FE8', secondaryDark: '#FFD600' },
   LAR: { primary: '#003594', secondary: '#FFA300', primaryDark: '#3D6FE8', secondaryDark: '#FFD600' },
   MIA: { primary: '#008E97', secondary: '#FC4C02', primaryDark: '#00E5FF', secondaryDark: '#FF6B3D' },
   MIN: { primary: '#4F2683', secondary: '#FFC62F', primaryDark: '#9B59D1', secondaryDark: '#FFD600' },
@@ -42,14 +43,13 @@ interface TeamLogoProps {
 }
 
 const sizeClasses = {
-  sm: 'w-8 h-8 text-xs',
-  md: 'w-10 h-10 text-sm',
-  lg: 'w-12 h-12 text-base',
+  sm: 'w-8 h-8 text-[10px]',
+  md: 'w-10 h-10 text-xs',
+  lg: 'w-12 h-12 text-sm',
 };
 
 export function TeamLogo({ team, size = 'md', className }: TeamLogoProps) {
   const colors = teamColors[team] || { primary: '#6B7280', secondary: '#FFFFFF', primaryDark: '#9CA3AF', secondaryDark: '#FFFFFF' };
-  const initials = team.slice(0, 2).toUpperCase();
 
   return (
     <div
@@ -65,7 +65,7 @@ export function TeamLogo({ team, size = 'md', className }: TeamLogoProps) {
       } as React.CSSProperties}
       aria-label={team}
     >
-      {initials}
+      {team}
     </div>
   );
 }

@@ -18,8 +18,6 @@ export function DriveList({ data, homeTeam, awayTeam }: DriveListProps) {
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([quarter]) => quarter); // Keep as string key
 
-  const hasOvertime = !!data.overtime;
-
   return (
     <div className="space-y-4">
       {quarters.map((quarter) => (
@@ -31,15 +29,6 @@ export function DriveList({ data, homeTeam, awayTeam }: DriveListProps) {
           awayTeam={awayTeam}
         />
       ))}
-      {hasOvertime && data.overtime && (
-        <QuarterDriveAccordion
-          quarter={5}
-          summary={data.overtime}
-          homeTeam={homeTeam}
-          awayTeam={awayTeam}
-          isOvertime
-        />
-      )}
     </div>
   );
 }
@@ -49,12 +38,11 @@ interface QuarterDriveAccordionProps {
   summary: QuarterDriveSummary;
   homeTeam: string;
   awayTeam: string;
-  isOvertime?: boolean;
 }
 
-function QuarterDriveAccordion({ quarter, summary, homeTeam, awayTeam, isOvertime }: QuarterDriveAccordionProps) {
+function QuarterDriveAccordion({ quarter, summary, homeTeam, awayTeam }: QuarterDriveAccordionProps) {
   const [open, setOpen] = useState(Number(quarter) <= 2);
-  const label = isOvertime ? 'OT' : `Q${quarter}`;
+  const label = Number(quarter) >= 5 ? 'OT' : `Q${quarter}`; // overtime is quarter 5
 
   const homeTotal = summary.total?.home || { drives: 0, points: 0, time_of_possession: '0:00', yards: 0 };
   const awayTotal = summary.total?.away || { drives: 0, points: 0, time_of_possession: '0:00', yards: 0 };

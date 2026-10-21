@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronIcon } from '../ui/ChevronIcon';
 import type { DriveDetail, PlayDetail } from '../../api/types';
+import { epaColor, formatEPA } from '../../utils/epa';
 
 interface DriveItemProps {
   drive: DriveDetail;
@@ -20,8 +21,11 @@ export function DriveItem({ drive, index }: DriveItemProps) {
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <span className="text-sm font-mono text-gray-500 dark:text-gray-400 w-8">#{index + 1}</span>
           <span className={`px-2 py-1 rounded text-xs font-medium ${resultColor}`}>
-            {drive.result}
+            {drive.result.replace(/_/g, ' ')}
           </span>
+          {drive.points > 0 && (
+            <span className="text-xs font-mono font-medium text-green-700 dark:text-green-300">+{drive.points}</span>
+          )}
           <span className="text-sm font-medium text-nfl-dark dark:text-nfl-light">
             {drive.team}
           </span>
@@ -59,7 +63,6 @@ export function DriveItem({ drive, index }: DriveItemProps) {
 }
 
 function DrivePlayRow({ play }: { play: PlayDetail }) {
-  const epaColor = play.epa > 0 ? 'text-green-600 dark:text-green-400' : play.epa < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400';
   const playTypeIcon = getPlayTypeIcon(play.play_type);
 
   return (
@@ -67,7 +70,7 @@ function DrivePlayRow({ play }: { play: PlayDetail }) {
       <span className="w-10 font-mono text-gray-500 dark:text-gray-400">{play.down}&{play.distance}</span>
       <span className="w-6">{playTypeIcon}</span>
       <span className="flex-1 text-gray-700 dark:text-gray-300">{play.description}</span>
-      <span className={`${epaColor} font-mono whitespace-nowrap`}>EPA: {play.epa > 0 ? '+' : ''}{play.epa.toFixed(1)}</span>
+      <span className={`${epaColor(play.epa)} font-mono whitespace-nowrap`}>EPA: {formatEPA(play.epa)}</span>
     </div>
   );
 }
@@ -80,6 +83,7 @@ function getResultColor(result: string) {
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
     case 'PUNT':
       return 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300';
+    case 'MISSED_FIELD_GOAL':
     case 'INTERCEPTION':
     case 'FUMBLE_LOST':
     case 'DOWNS':

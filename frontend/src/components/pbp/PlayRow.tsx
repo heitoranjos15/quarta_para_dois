@@ -1,7 +1,7 @@
 import type { PlayDetail } from '../../api/types';
+import { epaColor, formatEPA } from '../../utils/epa';
 
 export function PlayRow({ play }: { play: PlayDetail }) {
-  const epaColor = play.epa > 0 ? 'text-green-600 dark:text-green-400' : play.epa < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400';
   const playTypeIcon = getPlayTypeIcon(play.play_type);
 
   return (
@@ -18,7 +18,7 @@ export function PlayRow({ play }: { play: PlayDetail }) {
             {play.tackler && ` \u2014 tackled by ${play.tackler}`}
           </p>
         </div>
-        <span className={`${epaColor} font-mono font-medium whitespace-nowrap`}>EPA: {play.epa > 0 ? '+' : ''}{play.epa.toFixed(1)}</span>
+        <span className={`${epaColor(play.epa)} font-mono font-medium whitespace-nowrap`}>EPA: {formatEPA(play.epa)}</span>
       </div>
       {play.is_scoring_play && (
         <span className="text-xs bg-nfl-gold text-nfl-dark px-2 py-0.5 rounded">SCORING PLAY</span>

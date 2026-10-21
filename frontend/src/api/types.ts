@@ -1,13 +1,22 @@
+export type GameStatus = 'scheduled' | 'in_progress' | 'final';
+
 export interface Game {
   game_id: string;
+  espn_id: string;
   season: number;
   week: number;
+  game_type: string;
+  kickoff: string; // RFC3339 UTC, "" if unknown
+  status: GameStatus;
   home_team: string;
   away_team: string;
-  home_score: number;
-  away_score: number;
-  game_date: string;
-  venue: string;
+  home_score: number | null;
+  away_score: number | null;
+  stadium: string;
+  location: string;
+  indoor: boolean;
+  roof?: string;
+  surface?: string;
 }
 
 export interface TeamComparisonStats {
@@ -26,10 +35,13 @@ export interface TeamUnitStats {
   pass_rate: number;
   rush_epa: number;
   pass_epa: number;
+  red_zone_trips: number;
+  red_zone_tds: number;
   red_zone_pct: number;
   third_down_pct: number;
   fourth_down_pct: number;
   time_of_possession: string;
+  time_of_possession_seconds: number;
   explosive_plays: number;
   turnovers: number;
 }
@@ -50,6 +62,8 @@ export interface TeamUnitStatsAPI {
   PassRate: number;
   RushEPA: number;
   PassEPA: number;
+  RedZoneTrips: number;
+  RedZoneTDs: number;
   RedZonePct: number;
   ThirdDownPct: number;
   FourthDownPct: number;
@@ -77,10 +91,13 @@ function mapTeamUnitStats(api: TeamUnitStatsAPI): TeamUnitStats {
     pass_rate: api.PassRate,
     rush_epa: api.RushEPA,
     pass_epa: api.PassEPA,
+    red_zone_trips: api.RedZoneTrips,
+    red_zone_tds: api.RedZoneTDs,
     red_zone_pct: api.RedZonePct,
     third_down_pct: api.ThirdDownPct,
     fourth_down_pct: api.FourthDownPct,
     time_of_possession: formatTimeOfPossession(api.TimeOfPossession),
+    time_of_possession_seconds: Math.floor(api.TimeOfPossession / 1_000_000_000),
     explosive_plays: api.ExplosivePlays,
     turnovers: api.Turnovers,
   };
@@ -101,7 +118,7 @@ export interface PlayDetail {
   yardline: number;
   play_type: string;
   description: string;
-  epa: number;
+  epa: number | null;
   passer: string;
   receiver: string;
   rusher: string;
@@ -122,7 +139,7 @@ export interface PlayDetailAPI {
   Yardline: number;
   PlayType: string;
   Description: string;
-  EPA: number;
+  EPA: number | null;
   Passer: string;
   Receiver: string;
   Rusher: string;
@@ -174,11 +191,12 @@ export interface DriveAPI {
   TOP: number;
 }
 
+// Only what the API actually provides; Part 3 adds weather, injuries and officials.
 export interface GameNotes {
-  weather: WeatherInfo;
-  injuries: InjuryInfo[];
-  officials: OfficialInfo[];
-  game_info: GameInfo;
+  stadium: string;
+  roof: string;
+  surface: string;
+  indoor: boolean;
 }
 
 export interface DriveDetail {
@@ -190,6 +208,7 @@ export interface DriveDetail {
   yards: number;
   time_of_possession: string;
   result: string;
+  points: number;
   end_play_description: string;
   end_play_type: string;
   plays: PlayDetail[];
@@ -211,8 +230,7 @@ export interface QuarterDriveSummary {
 }
 
 export interface DriveSummaryResponse {
-  quarters: Record<number, QuarterDriveSummary>;
-  overtime?: QuarterDriveSummary;
+  quarters: Record<number, QuarterDriveSummary>; // overtime is quarter 5
 }
 
 interface DriveDetailAPI extends Omit<DriveDetail, 'plays'> {
@@ -226,7 +244,6 @@ interface QuarterDriveSummaryAPI {
 
 export interface DriveSummaryResponseAPI {
   quarters: Record<number, QuarterDriveSummaryAPI> | null;
-  overtime?: QuarterDriveSummaryAPI | null;
 }
 
 function mapQuarterDriveSummary(q: QuarterDriveSummaryAPI): QuarterDriveSummary {
@@ -247,123 +264,10 @@ export function mapDriveSummary(api: DriveSummaryResponseAPI): DriveSummaryRespo
   Object.entries(api.quarters ?? {}).forEach(([q, summary]) => {
     quarters[Number(q)] = mapQuarterDriveSummary(summary);
   });
-  return {
-    quarters,
-    overtime: api.overtime ? mapQuarterDriveSummary(api.overtime) : undefined,
-  };
-}
-
-export interface GameNotesAPI {
-  weather: WeatherInfoAPI;
-  vegas: VegasInfoAPI;
-}
-
-export interface WeatherInfoAPI {
-  temperature: number;
-  wind: number;
-  condition: string;
-  stadium: string;
-  roof: string;
-}
-
-export interface VegasInfoAPI {
-  spread: number;
-  total: number;
-  home_ml: number;
-  away_ml: number;
-}
-
-export function mapGameNotes(api: GameNotesAPI): GameNotes {
-  return {
-    weather: {
-      temperature: api.weather.temperature,
-      wind_speed: api.weather.wind,
-      wind_direction: '',
-      conditions: api.weather.condition,
-      humidity: 0,
-    },
-    injuries: [],
-    officials: [],
-    game_info: {
-      game_id: '',
-      stadium: api.weather.stadium,
-      surface: '',
-      roof: api.weather.roof,
-      attendance: 0,
-      duration: '',
-    },
-  };
-}
-
-export interface WeatherInfo {
-  temperature: number;
-  wind_speed: number;
-  wind_direction: string;
-  conditions: string;
-  humidity: number;
-}
-
-export interface InjuryInfo {
-  player: string;
-  team: string;
-  status: string;
-  body_part: string;
-  practice: string;
-}
-
-export interface OfficialInfo {
-  name: string;
-  role: string;
-}
-
-export interface GameInfo {
-  game_id: string;
-  stadium: string;
-  surface: string;
-  roof: string;
-  attendance: number;
-  duration: string;
+  return { quarters };
 }
 
 export interface APIResponse<T> {
   data: T;
   meta: { cached: boolean; season: number };
-}
-
-export interface GameAPI {
-  GameID: string;
-  Season: number;
-  Week: number;
-  GameType: string;
-  GameDate: string;
-  Weekday: string;
-  GameTime: string;
-  HomeTeam: string;
-  AwayTeam: string;
-  HomeScore: number;
-  AwayScore: number;
-  Location: string;
-  Stadium: string;
-  Surface: string;
-  Roof: string;
-  Temp: number;
-  Wind: number;
-  HomeCoach: string;
-  AwayCoach: string;
-  Referee: string;
-  StadiumId: string;
-}
-
-export function mapGameAPItoGame(api: GameAPI): Game {
-  return {
-    game_id: api.GameID,
-    season: api.Season,
-    week: api.Week,
-    home_team: api.HomeTeam,
-    away_team: api.AwayTeam,
-    home_score: api.HomeScore,
-    away_score: api.AwayScore,
-    game_date: api.GameDate,
-    venue: api.Stadium,
-  };
 }

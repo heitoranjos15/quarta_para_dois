@@ -1,17 +1,15 @@
 import ky from 'ky';
 import type {
-  GameAPI,
+  Game,
+  GameNotes,
   TeamComparisonStatsAPI,
   PlayByPlayResponseAPI,
-  GameNotesAPI,
   DriveSummaryResponseAPI,
   APIResponse,
 } from './types';
 import {
-  mapGameAPItoGame,
   mapTeamComparisonStats,
   mapPlayDetail,
-  mapGameNotes,
   mapDriveSummary,
 } from './types';
 
@@ -32,16 +30,14 @@ export const getWeeks = (season: number) =>
 export const getGames = (season: number, week: number) =>
   api
     .get(`api/seasons/${season}/weeks/${week}/games`)
-    .json<APIResponse<GameAPI[]>>()
-    .then(extractData)
-    .then((games) => games.map(mapGameAPItoGame));
+    .json<APIResponse<Game[]>>()
+    .then(extractData);
 
 export const getGame = (gameId: string) =>
   api
     .get(`api/games/${gameId}`)
-    .json<APIResponse<GameAPI>>()
-    .then(extractData)
-    .then(mapGameAPItoGame);
+    .json<APIResponse<Game>>()
+    .then(extractData);
 
 export const getGameStats = (gameId: string) =>
   api
@@ -67,9 +63,8 @@ export const getPlays = (
 export const getGameNotes = (gameId: string) =>
   api
     .get(`api/games/${gameId}/notes`)
-    .json<APIResponse<GameNotesAPI>>()
-    .then(extractData)
-    .then(mapGameNotes);
+    .json<APIResponse<GameNotes>>()
+    .then(extractData);
 
 export const getDrives = (gameId: string) =>
   api
