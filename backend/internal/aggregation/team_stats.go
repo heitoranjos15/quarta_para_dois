@@ -7,29 +7,29 @@ import (
 )
 
 type TeamUnitStats struct {
-	Plays            int
-	EPA_per_play     float64
-	SuccessRate      float64
-	PassRate         float64
-	RushEPA          float64
-	PassEPA          float64
-	RedZoneTrips     int     // drives that reached the opponent 20
-	RedZoneTDs       int     // of those, drives that ended in a touchdown
-	RedZonePct       float64 // RedZoneTDs / RedZoneTrips
-	ThirdDownPct     float64
-	FourthDownPct    float64
-	TimeOfPossession time.Duration
-	ExplosivePlays   int
-	Turnovers        int
+	Plays            int           `json:"plays"`
+	EPA_per_play     float64       `json:"epa_per_play"`
+	SuccessRate      float64       `json:"success_rate"`
+	PassRate         float64       `json:"pass_rate"`
+	RushEPA          float64       `json:"rush_epa"`
+	PassEPA          float64       `json:"pass_epa"`
+	RedZoneTrips     int           `json:"red_zone_trips"` // drives that reached the opponent 20
+	RedZoneTDs       int           `json:"red_zone_tds"`   // of those, drives that ended in a touchdown
+	RedZonePct       float64       `json:"red_zone_pct"`   // RedZoneTDs / RedZoneTrips
+	ThirdDownPct     float64       `json:"third_down_pct"`
+	FourthDownPct    float64       `json:"fourth_down_pct"`
+	TimeOfPossession time.Duration `json:"time_of_possession_ns"`
+	ExplosivePlays   int           `json:"explosive_plays"`
+	Turnovers        int           `json:"turnovers"`
 }
 
 type TeamComparisonStats struct {
-	HomeTeam    string
-	AwayTeam    string
-	HomeOffense TeamUnitStats
-	HomeDefense TeamUnitStats
-	AwayOffense TeamUnitStats
-	AwayDefense TeamUnitStats
+	HomeTeam    string        `json:"home_team"`
+	AwayTeam    string        `json:"away_team"`
+	HomeOffense TeamUnitStats `json:"home_offense"`
+	HomeDefense TeamUnitStats `json:"home_defense"`
+	AwayOffense TeamUnitStats `json:"away_offense"`
+	AwayDefense TeamUnitStats `json:"away_defense"`
 }
 
 func ComputeTeamStats(plays []nflverse.Play) TeamComparisonStats {

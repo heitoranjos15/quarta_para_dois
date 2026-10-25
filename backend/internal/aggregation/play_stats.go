@@ -8,40 +8,40 @@ import (
 )
 
 type PlayDetail struct {
-	PlayID         int
-	Quarter        int
-	Down           int
-	Distance       int
-	Yardline       int
-	PlayType       string
-	Description    string
-	EPA            *float64 // nil when nflverse has no value
-	Passer         string
-	Receiver       string
-	Rusher         string
-	Tackler        string
-	IsScoringPlay  bool
-	DriveID        int
-	DrivePlayCount int
-	DriveYards     int
-	DriveResult    string
-	DriveTOP       time.Duration
+	PlayID         int           `json:"play_id"`
+	Quarter        int           `json:"quarter"`
+	Down           int           `json:"down"`
+	Distance       int           `json:"distance"`
+	Yardline       int           `json:"yardline"`
+	PlayType       string        `json:"play_type"`
+	Description    string        `json:"description"`
+	EPA            *float64      `json:"epa"` // nil when nflverse has no value
+	Passer         string        `json:"passer"`
+	Receiver       string        `json:"receiver"`
+	Rusher         string        `json:"rusher"`
+	Tackler        string        `json:"tackler"`
+	IsScoringPlay  bool          `json:"is_scoring_play"`
+	DriveID        int           `json:"drive_id"`
+	DrivePlayCount int           `json:"drive_play_count"`
+	DriveYards     int           `json:"drive_yards"`
+	DriveResult    string        `json:"drive_result"`
+	DriveTOP       time.Duration `json:"drive_top_ns"`
 }
 
 type DriveSummary struct {
-	DriveID       int
-	StartYardline int
-	EndYardline   int
-	Yards         int
-	PlayCount     int
-	Result        string
-	TOP           time.Duration
+	DriveID       int           `json:"drive_id"`
+	StartYardline int           `json:"start_yardline"`
+	EndYardline   int           `json:"end_yardline"`
+	Yards         int           `json:"yards"`
+	PlayCount     int           `json:"play_count"`
+	Result        string        `json:"result"`
+	TOP           time.Duration `json:"top_ns"`
 }
 
 type QuarterPlays struct {
-	Quarter int
-	Plays   []PlayDetail
-	Drives  []DriveSummary
+	Quarter int            `json:"quarter"`
+	Plays   []PlayDetail   `json:"plays"`
+	Drives  []DriveSummary `json:"drives"`
 }
 
 // ProcessPlays lists a game's plays by quarter. Drives are grouped by nflverse's fixed_drive

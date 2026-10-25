@@ -57,7 +57,7 @@ export const getPlays = (
     .then((response) => {
       // Handle both single quarter (when quarter param provided) and all quarters (array)
       const quarters = Array.isArray(response) ? response : [response];
-      return quarters.flatMap((q) => q.Plays.map(mapPlayDetail));
+      return quarters.flatMap((q) => q.plays.map(mapPlayDetail));
     });
 
 export const getGameNotes = (gameId: string) =>
