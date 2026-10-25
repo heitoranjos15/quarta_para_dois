@@ -48,59 +48,34 @@ export interface TeamUnitStats {
 }
 
 export interface TeamComparisonStatsAPI {
-  HomeTeam: string;
-  AwayTeam: string;
-  HomeOffense: TeamUnitStatsAPI;
-  HomeDefense: TeamUnitStatsAPI;
-  AwayOffense: TeamUnitStatsAPI;
-  AwayDefense: TeamUnitStatsAPI;
+  home_team: string;
+  away_team: string;
+  home_offense: TeamUnitStatsAPI;
+  home_defense: TeamUnitStatsAPI;
+  away_offense: TeamUnitStatsAPI;
+  away_defense: TeamUnitStatsAPI;
 }
 
-export interface TeamUnitStatsAPI {
-  Plays: number;
-  EPA_per_play: number;
-  SuccessRate: number;
-  PassRate: number;
-  RushEPA: number;
-  PassEPA: number;
-  RedZoneTrips: number;
-  RedZoneTDs: number;
-  RedZonePct: number;
-  ThirdDownPct: number;
-  FourthDownPct: number;
-  TimeOfPossession: number;
-  ExplosivePlays: number;
-  Turnovers: number;
+export interface TeamUnitStatsAPI extends Omit<TeamUnitStats, 'time_of_possession' | 'time_of_possession_seconds'> {
+  time_of_possession_ns: number;
 }
 
 export function mapTeamComparisonStats(api: TeamComparisonStatsAPI): TeamComparisonStats {
   return {
-    home_team: api.HomeTeam,
-    away_team: api.AwayTeam,
-    home_offense: mapTeamUnitStats(api.HomeOffense),
-    home_defense: mapTeamUnitStats(api.HomeDefense),
-    away_offense: mapTeamUnitStats(api.AwayOffense),
-    away_defense: mapTeamUnitStats(api.AwayDefense),
+    home_team: api.home_team,
+    away_team: api.away_team,
+    home_offense: mapTeamUnitStats(api.home_offense),
+    home_defense: mapTeamUnitStats(api.home_defense),
+    away_offense: mapTeamUnitStats(api.away_offense),
+    away_defense: mapTeamUnitStats(api.away_defense),
   };
 }
 
-function mapTeamUnitStats(api: TeamUnitStatsAPI): TeamUnitStats {
+function mapTeamUnitStats({ time_of_possession_ns, ...api }: TeamUnitStatsAPI): TeamUnitStats {
   return {
-    plays: api.Plays,
-    epa_per_play: api.EPA_per_play,
-    success_rate: api.SuccessRate,
-    pass_rate: api.PassRate,
-    rush_epa: api.RushEPA,
-    pass_epa: api.PassEPA,
-    red_zone_trips: api.RedZoneTrips,
-    red_zone_tds: api.RedZoneTDs,
-    red_zone_pct: api.RedZonePct,
-    third_down_pct: api.ThirdDownPct,
-    fourth_down_pct: api.FourthDownPct,
-    time_of_possession: formatTimeOfPossession(api.TimeOfPossession),
-    time_of_possession_seconds: Math.floor(api.TimeOfPossession / 1_000_000_000),
-    explosive_plays: api.ExplosivePlays,
-    turnovers: api.Turnovers,
+    ...api,
+    time_of_possession: formatTimeOfPossession(time_of_possession_ns),
+    time_of_possession_seconds: Math.floor(time_of_possession_ns / 1_000_000_000),
   };
 }
 
@@ -132,64 +107,32 @@ export interface PlayDetail {
   drive_top: string;
 }
 
-export interface PlayDetailAPI {
-  PlayID: number;
-  Quarter: number;
-  Down: number;
-  Distance: number;
-  Yardline: number;
-  PlayType: string;
-  Description: string;
-  EPA: number | null;
-  Passer: string;
-  Receiver: string;
-  Rusher: string;
-  Tackler: string;
-  IsScoringPlay: boolean;
-  DriveID: number;
-  DrivePlayCount: number;
-  DriveYards: number;
-  DriveResult: string;
-  DriveTOP: string;
+export interface PlayDetailAPI extends Omit<PlayDetail, 'drive_top'> {
+  drive_top_ns: number;
 }
 
-export function mapPlayDetail(api: PlayDetailAPI): PlayDetail {
+export function mapPlayDetail({ drive_top_ns, ...api }: PlayDetailAPI): PlayDetail {
   return {
-    play_id: api.PlayID,
-    quarter: api.Quarter,
-    down: api.Down,
-    distance: api.Distance,
-    yardline: api.Yardline,
-    play_type: api.PlayType.toLowerCase(),
-    description: api.Description,
-    epa: api.EPA,
-    passer: api.Passer,
-    receiver: api.Receiver,
-    rusher: api.Rusher,
-    tackler: api.Tackler,
-    is_scoring_play: api.IsScoringPlay,
-    drive_id: api.DriveID,
-    drive_play_count: api.DrivePlayCount,
-    drive_yards: api.DriveYards,
-    drive_result: api.DriveResult,
-    drive_top: api.DriveTOP,
+    ...api,
+    play_type: api.play_type.toLowerCase(),
+    drive_top: formatTimeOfPossession(drive_top_ns),
   };
 }
 
 export interface PlayByPlayResponseAPI {
-  Quarter: number;
-  Plays: PlayDetailAPI[];
-  Drives: DriveAPI[];
+  quarter: number;
+  plays: PlayDetailAPI[];
+  drives: DriveAPI[] | null;
 }
 
 export interface DriveAPI {
-  DriveID: number;
-  StartYardline: number;
-  EndYardline: number;
-  Yards: number;
-  PlayCount: number;
-  Result: string;
-  TOP: number;
+  drive_id: number;
+  start_yardline: number;
+  end_yardline: number;
+  yards: number;
+  play_count: number;
+  result: string;
+  top_ns: number;
 }
 
 // Only what the API actually provides; Part 3 adds weather, injuries and officials.

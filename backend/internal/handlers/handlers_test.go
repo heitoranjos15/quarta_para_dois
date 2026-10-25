@@ -231,6 +231,46 @@ func TestGamePlaysHandler(t *testing.T) {
 	assert.Len(t, resp.Data[0].Plays, 2)
 }
 
+func TestGameStatsHandler_SnakeCaseKeys(t *testing.T) {
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/stats", nil))
+
+	var raw struct {
+		Data map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	assert.ElementsMatch(t, []string{"home_team", "away_team", "home_offense", "home_defense", "away_offense", "away_defense"}, keys(raw.Data))
+	assert.ElementsMatch(t, []string{"plays", "epa_per_play", "success_rate", "pass_rate", "rush_epa", "pass_epa",
+		"red_zone_trips", "red_zone_tds", "red_zone_pct", "third_down_pct", "fourth_down_pct",
+		"time_of_possession_ns", "explosive_plays", "turnovers"}, keys(raw.Data["home_offense"].(map[string]any)))
+}
+
+func TestGamePlaysHandler_SnakeCaseKeys(t *testing.T) {
+	router := setupTestRouter()
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/plays", nil))
+
+	var raw struct {
+		Data []map[string]any `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
+	require.NotEmpty(t, raw.Data)
+	assert.ElementsMatch(t, []string{"quarter", "plays", "drives"}, keys(raw.Data[0]))
+	play := raw.Data[0]["plays"].([]any)[0].(map[string]any)
+	assert.ElementsMatch(t, []string{"play_id", "quarter", "down", "distance", "yardline", "play_type", "description",
+		"epa", "passer", "receiver", "rusher", "tackler", "is_scoring_play", "drive_id", "drive_play_count",
+		"drive_yards", "drive_result", "drive_top_ns"}, keys(play))
+
+	// The test plays have no drives, so check the drive shape directly.
+	b, err := json.Marshal(aggregation.DriveSummary{})
+	require.NoError(t, err)
+	var drive map[string]any
+	require.NoError(t, json.Unmarshal(b, &drive))
+	assert.ElementsMatch(t, []string{"drive_id", "start_yardline", "end_yardline", "yards", "play_count", "result", "top_ns"},
+		keys(drive))
+}
+
 func TestGameNotesHandler(t *testing.T) {
 	router := setupTestRouter()
 	req := httptest.NewRequest(http.MethodGet, "/api/games/2024_01_DEN_LAC/notes", nil)
