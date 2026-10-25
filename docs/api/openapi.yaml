@@ -1,0 +1,577 @@
+openapi: 3.1.0
+info:
+  title: Quarta Para Dois API
+  version: 0.1.0
+  description: |
+    Read-only NFL game analytics API. Schedules and scores come from ESPN and nflverse's
+    games.csv; play-by-play, team stats and drives come from nflverse play-by-play data.
+
+    * No authentication. All endpoints are `GET`.
+    * Every successful response is wrapped in an envelope: `{ "data": ..., "meta": { "cached", "season" } }`.
+    * Every error response is `{ "error": "<message>" }` with a 4xx/5xx status.
+    * All JSON keys are snake_case.
+    * Durations come in two formats: fields ending in `_ns` (on `/stats` and `/plays`) are
+      integer **nanoseconds**; `time_of_possession` on `/drives` is an `"M:SS"` string.
+security: []  # no authentication
+servers:
+  - url: https://quarta-para-dois-api.fly.dev
+    description: Production (Fly.io)
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Seasons
+  - name: Games
+  - name: Teams
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      operationId: health
+      responses:
+        "200":
+          description: The server is up. Plain-text body `ok` (not JSON, no envelope).
+          content:
+            text/plain:
+              schema:
+                type: string
+                const: ok
+
+  /api/seasons:
+    get:
+      tags: [Seasons]
+      summary: List available seasons
+      description: Seasons ascending. `meta.season` is the latest season (or 0 if none).
+      operationId: listSeasons
+      responses:
+        "200":
+          description: Seasons
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { type: integer, example: 2026 }
+              example:
+                data: [2024, 2025, 2026]
+                meta: { cached: false, season: 2026 }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/seasons/{year}/weeks:
+    get:
+      tags: [Seasons]
+      summary: List the weeks of a season
+      description: |
+        Week numbers ascending, using nflverse numbering: regular season is 1–18 and the
+        postseason continues after it (e.g. 19 Wild Card, 20 Divisional, 21 Conference,
+        22 Super Bowl). Use `game_type` on each game to label a week. An unknown season
+        returns an empty array.
+      operationId: listWeeks
+      parameters:
+        - $ref: "#/components/parameters/Year"
+      responses:
+        "200":
+          description: Weeks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { type: integer, example: 1 }
+              example:
+                data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+                meta: { cached: false, season: 2026 }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/seasons/{year}/weeks/{week}/games:
+    get:
+      tags: [Seasons]
+      summary: List the games of a week
+      description: |
+        A regular-season week (1–18) not yet published in games.csv is still looked up on ESPN,
+        so an upcoming week is not empty. A postseason week that isn't known yet returns 404.
+      operationId: listWeekGames
+      parameters:
+        - $ref: "#/components/parameters/Year"
+        - name: week
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, example: 6 }
+      responses:
+        "200":
+          description: Games of the week
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Game" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/games/{gameID}:
+    get:
+      tags: [Games]
+      summary: Get one game
+      description: |
+        Schedule, status and score for a game. If ESPN can't provide the game, it is still
+        returned from games.csv (with `status` possibly `""` and scores possibly `null`).
+      operationId: getGame
+      parameters:
+        - $ref: "#/components/parameters/GameID"
+      responses:
+        "200":
+          description: The game
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Game" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/games/{gameID}/notes:
+    get:
+      tags: [Games]
+      summary: Get venue notes for a game
+      description: Venue fields only; the same values also appear on `Game`.
+      operationId: getGameNotes
+      parameters:
+        - $ref: "#/components/parameters/GameID"
+      responses:
+        "200":
+          description: Venue notes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/GameNotes" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/games/{gameID}/stats:
+    get:
+      tags: [Games]
+      summary: Get team comparison stats for a game
+      description: |
+        Offense and defense stats for both teams, computed from play-by-play.
+        `time_of_possession_ns` is in nanoseconds.
+        Returns 404 until nflverse has published play-by-play for the game (usually the
+        day after it's played), so scheduled and live games return 404.
+      operationId: getGameStats
+      parameters:
+        - $ref: "#/components/parameters/GameID"
+      responses:
+        "200":
+          description: Team stats
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/TeamComparisonStats" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/PlaysNotAvailable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/games/{gameID}/plays:
+    get:
+      tags: [Games]
+      summary: Get play-by-play grouped by quarter
+      description: |
+        Plays sorted by `play_id`, grouped by quarter (overtime is quarter 5).
+        `drive_top_ns` and `top_ns` are in nanoseconds.
+        Drives are whole-game drives listed under the quarter they started in, so a drive
+        crossing a quarter break appears once. Same 404 behaviour as `/stats`.
+      operationId: getGamePlays
+      parameters:
+        - $ref: "#/components/parameters/GameID"
+        - name: quarter
+          in: query
+          required: false
+          description: Only plays from this quarter (5 = overtime).
+          schema: { type: integer, minimum: 1, maximum: 5 }
+        - name: drive
+          in: query
+          required: false
+          description: Only plays from this drive (`drive_id`).
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Plays by quarter. Empty array if the filters match nothing.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/QuarterPlays" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/PlaysNotAvailable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/games/{gameID}/drives:
+    get:
+      tags: [Games]
+      summary: Get drives grouped by quarter with per-team totals
+      description: |
+        Durations are `"M:SS"` strings. Each drive is listed under the
+        quarter it started in (overtime is quarter 5) and counted once in that quarter's
+        totals. Same 404 behaviour as `/stats`.
+      operationId: getGameDrives
+      parameters:
+        - $ref: "#/components/parameters/GameID"
+      responses:
+        "200":
+          description: Drive summary
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/DriveSummaryResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/PlaysNotAvailable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /api/teams/{abbr}/games:
+    get:
+      tags: [Teams]
+      summary: List a team's games for a season
+      description: |
+        A team's schedule from ESPN. `abbr` is case-insensitive. An unknown team or an
+        upstream failure returns 503 (there is no 404 for unknown teams).
+      operationId: listTeamGames
+      parameters:
+        - name: abbr
+          in: path
+          required: true
+          description: Team abbreviation, e.g. `SF`, `KC`, `WAS`.
+          schema: { type: string, example: SF }
+        - name: season
+          in: query
+          required: false
+          description: |
+            Season year. Defaults to the current season (the current year from September
+            on, the previous year before that). A non-numeric value is ignored and the default
+            is used.
+          schema: { type: integer, example: 2026 }
+      responses:
+        "200":
+          description: The team's games
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Game" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+components:
+  parameters:
+    Year:
+      name: year
+      in: path
+      required: true
+      description: Season year (1999 or later).
+      schema: { type: integer, minimum: 1999, example: 2026 }
+    GameID:
+      name: gameID
+      in: path
+      required: true
+      description: nflverse game ID `YYYY_WW_AWAY_HOME` (week zero-padded, team abbreviations uppercase).
+      schema:
+        type: string
+        pattern: "^\\d{4}_\\d{2}_[A-Z]{2,3}_[A-Z]{2,3}$"
+        example: 2026_06_WAS_SF
+
+  responses:
+    BadRequest:
+      description: Invalid path parameter (`invalid season`, `invalid week`, `invalid game id`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: invalid game id }
+    NotFound:
+      description: The week or game doesn't exist (`week not found`, `game not found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: game not found }
+    PlaysNotAvailable:
+      description: |
+        No play-by-play for this game yet (`game not available yet`). Expected for scheduled
+        and live games; show an empty state rather than an error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: game not available yet }
+    Unavailable:
+      description: An upstream source (ESPN, nflverse) failed. Safe to retry.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: failed to fetch game }
+
+  schemas:
+    Envelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta: { $ref: "#/components/schemas/Meta" }
+
+    Meta:
+      type: object
+      required: [cached, season]
+      properties:
+        cached:
+          type: boolean
+          description: Informational only; don't rely on it.
+        season:
+          type: integer
+          description: The season the response belongs to.
+          example: 2026
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    GameStatus:
+      type: string
+      enum: [scheduled, in_progress, final, ""]
+      description: |
+        `""` means unknown: the game came from games.csv only and is past kickoff without a
+        score yet. Decode unknown values defensively.
+
+    Game:
+      type: object
+      required: [game_id, espn_id, season, week, game_type, kickoff, status, home_team, away_team,
+                 home_score, away_score, stadium, location, indoor]
+      properties:
+        game_id: { type: string, example: 2026_06_WAS_SF }
+        espn_id: { type: string, description: May be empty., example: "401772940" }
+        season: { type: integer, example: 2026 }
+        week: { type: integer, example: 6 }
+        game_type:
+          type: string
+          description: "`REG`, `WC`, `DIV`, `CON` or `SB` (nflverse). May be empty for games ESPN knows but games.csv doesn't yet."
+          example: REG
+        kickoff:
+          type: string
+          description: RFC 3339 UTC timestamp, or `""` if unknown.
+          example: "2026-10-12T00:20:00Z"
+        status: { $ref: "#/components/schemas/GameStatus" }
+        home_team: { type: string, example: SF }
+        away_team: { type: string, example: WAS }
+        home_score: { type: [integer, "null"], description: "`null` when there is no score yet.", example: 27 }
+        away_score: { type: [integer, "null"], example: 17 }
+        stadium: { type: string, example: Levi's Stadium }
+        location: { type: string, description: May be empty., example: "Santa Clara, CA" }
+        indoor: { type: boolean, description: "True when the roof is `dome` or `closed`." }
+        roof:
+          type: string
+          description: "Omitted when unknown. nflverse values: `outdoors`, `dome`, `closed`, `open`."
+          example: outdoors
+        surface:
+          type: string
+          description: Omitted when unknown (e.g. `grass`, `fieldturf`).
+          example: grass
+
+    GameNotes:
+      type: object
+      required: [stadium, roof, surface, indoor]
+      properties:
+        stadium: { type: string }
+        roof: { type: string, description: "`\"\"` when unknown." }
+        surface: { type: string, description: "`\"\"` when unknown." }
+        indoor: { type: boolean }
+
+    TeamComparisonStats:
+      type: object
+      required: [home_team, away_team, home_offense, home_defense, away_offense, away_defense]
+      properties:
+        home_team: { type: string, example: SF }
+        away_team: { type: string, example: WAS }
+        home_offense: { $ref: "#/components/schemas/TeamUnitStats" }
+        home_defense: { $ref: "#/components/schemas/TeamUnitStats" }
+        away_offense: { $ref: "#/components/schemas/TeamUnitStats" }
+        away_defense: { $ref: "#/components/schemas/TeamUnitStats" }
+
+    TeamUnitStats:
+      type: object
+      description: |
+        Rates and percentages are fractions in 0–1, not 0–100. A defense unit holds the stats
+        allowed to the opposing offense.
+      required: [plays, epa_per_play, success_rate, pass_rate, rush_epa, pass_epa, red_zone_trips,
+                 red_zone_tds, red_zone_pct, third_down_pct, fourth_down_pct, time_of_possession_ns,
+                 explosive_plays, turnovers]
+      properties:
+        plays: { type: integer }
+        epa_per_play: { type: number, format: double }
+        success_rate: { type: number, format: double, description: 0–1 }
+        pass_rate: { type: number, format: double, description: 0–1 }
+        rush_epa: { type: number, format: double }
+        pass_epa: { type: number, format: double }
+        red_zone_trips: { type: integer, description: Drives that reached the opponent 20. }
+        red_zone_tds: { type: integer, description: Red zone trips that ended in a touchdown. }
+        red_zone_pct: { type: number, format: double, description: "red_zone_tds / red_zone_trips, 0–1." }
+        third_down_pct: { type: number, format: double, description: 0–1 }
+        fourth_down_pct: { type: number, format: double, description: 0–1 }
+        time_of_possession_ns:
+          type: integer
+          format: int64
+          description: "**Nanoseconds.** Divide by 1_000_000_000 for seconds."
+          example: 1854000000000
+        explosive_plays: { type: integer }
+        turnovers: { type: integer }
+
+    QuarterPlays:
+      type: object
+      required: [quarter, plays, drives]
+      properties:
+        quarter: { type: integer, description: 1–4; 5 is overtime. }
+        plays:
+          type: array
+          items: { $ref: "#/components/schemas/PlayDetail" }
+        drives:
+          type: [array, "null"]
+          description: Drives that started in this quarter. **`null`** when none did.
+          items: { $ref: "#/components/schemas/DriveSummary" }
+
+    PlayDetail:
+      type: object
+      description: |
+        Used by `/plays` (all fields filled) and inside `/drives` (where `drive_play_count`,
+        `drive_yards`, `drive_result` and `drive_top_ns` are always zero/empty; use the
+        enclosing `DriveDetail` instead).
+      required: [play_id, quarter, down, distance, yardline, play_type, description, epa, passer,
+                 receiver, rusher, tackler, is_scoring_play, drive_id, drive_play_count, drive_yards,
+                 drive_result, drive_top_ns]
+      properties:
+        play_id: { type: integer }
+        quarter: { type: integer, description: 1–4; 5 is overtime. }
+        down: { type: integer, description: "1–4; 0 for plays without a down (kickoffs, PATs...)." }
+        distance: { type: integer, description: Yards to go. }
+        yardline: { type: integer, description: "Yards from the opponent's end zone (nflverse `yardline_100`): 75 = own 25, 20 = opponent 20." }
+        play_type:
+          type: string
+          description: "nflverse `play_type`: `pass`, `run`, `punt`, `field_goal`, `kickoff`, `extra_point`, `qb_kneel`, `qb_spike`, `no_play`, or `\"\"`."
+        description: { type: string }
+        epa: { type: [number, "null"], format: double, description: "`null` when nflverse has no value." }
+        passer: { type: string, description: "`\"\"` when not applicable. Same for receiver, rusher, tackler." }
+        receiver: { type: string }
+        rusher: { type: string }
+        tackler: { type: string }
+        is_scoring_play: { type: boolean, description: True for touchdowns only. }
+        drive_id: { type: integer, description: 0 when the play isn't part of a drive. }
+        drive_play_count: { type: integer }
+        drive_yards: { type: integer }
+        drive_result: { $ref: "#/components/schemas/DriveResult" }
+        drive_top_ns:
+          type: integer
+          format: int64
+          description: "Drive time of possession in **nanoseconds**."
+
+    DriveSummary:
+      type: object
+      description: "Used in `/plays`."
+      required: [drive_id, start_yardline, end_yardline, yards, play_count, result, top_ns]
+      properties:
+        drive_id: { type: integer }
+        start_yardline: { type: integer, description: Same convention as `PlayDetail.yardline`. }
+        end_yardline: { type: integer }
+        yards: { type: integer }
+        play_count: { type: integer }
+        result: { $ref: "#/components/schemas/DriveResult" }
+        top_ns: { type: integer, format: int64, description: "Drive time of possession in **nanoseconds**." }
+
+    DriveResult:
+      type: string
+      enum: [TOUCHDOWN, FIELD_GOAL, MISSED_FIELD_GOAL, PUNT, DOWNS, INTERCEPTION, FUMBLE_LOST,
+             SAFETY, END_OF_HALF, END_OF_GAME, OTHER, ""]
+      description: How a drive ended. `""` for plays outside a drive and for every play inside `/drives`. Decode unknown values defensively.
+
+    DriveSummaryResponse:
+      type: object
+      required: [quarters]
+      properties:
+        quarters:
+          type: object
+          description: |
+            Keyed by quarter number **as a string** (`"1"`–`"4"`, `"5"` = overtime). Quarters
+            with no drive starts are absent. Sort the keys numerically for display.
+          additionalProperties: { $ref: "#/components/schemas/QuarterDriveSummary" }
+
+    QuarterDriveSummary:
+      type: object
+      required: [drives, total]
+      properties:
+        drives:
+          type: array
+          items: { $ref: "#/components/schemas/DriveDetail" }
+        total:
+          type: object
+          required: [home, away]
+          properties:
+            home: { $ref: "#/components/schemas/TeamDriveTotal" }
+            away: { $ref: "#/components/schemas/TeamDriveTotal" }
+
+    DriveDetail:
+      type: object
+      required: [drive_id, team, start_yardline, end_yardline, plays_count, yards,
+                 time_of_possession, result, points, end_play_description, end_play_type, plays]
+      properties:
+        drive_id: { type: integer }
+        team: { type: string, description: Team with the ball., example: SF }
+        start_yardline: { type: integer, description: Same convention as `PlayDetail.yardline`. }
+        end_yardline: { type: integer }
+        plays_count: { type: integer }
+        yards: { type: integer }
+        time_of_possession: { type: string, description: "`M:SS`, may be `\"\"`.", example: "4:32" }
+        result: { $ref: "#/components/schemas/DriveResult" }
+        points: { type: integer, description: Points scored by the offense on this drive. }
+        end_play_description: { type: string }
+        end_play_type: { type: string }
+        plays:
+          type: array
+          description: Same `PlayDetail` shape as `/plays`.
+          items: { $ref: "#/components/schemas/PlayDetail" }
+
+    TeamDriveTotal:
+      type: object
+      required: [drives, points, time_of_possession, yards]
+      properties:
+        drives: { type: integer }
+        points: { type: integer }
+        time_of_possession: { type: string, description: "`M:SS`", example: "7:15" }
+        yards: { type: integer }
